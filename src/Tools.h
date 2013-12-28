@@ -23,7 +23,7 @@ namespace Tools
 	// measure running time
 	double CPUtime();
 }
-;
+
 // Tools
 
 #endif // __TOOLS__H__

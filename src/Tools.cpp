@@ -3,6 +3,8 @@
 
 #include "Tools.h"
 
+#include <unistd.h>
+
 string Tools::indicesToString( string prefix, int i, int j, int v )
 {
 	stringstream ss;
