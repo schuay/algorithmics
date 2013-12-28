@@ -1,30 +1,21 @@
-# For home installation adjust CPLEX_DIR, ARCH, GPP, CXXFLAGS, etc.
+# For home installation, edit vars.in.
 
-HOSTNAME = $(shell hostname)
-USERNAME = $(shell whoami)
+include vars.in
 
 EXEC = ./kmst -f data/g01.dat -m scf -k 5
 
 DEBUG = 0
 
-CPLEX_VERSION = 12.5
-CPLEX_DIR = /home1/share/ILOG/cplex-$(CPLEX_VERSION)
-
 SRCDIR = src
 OBJDIR = obj
 
-# 32bit: x86, 64bit: x86-64
-ARCH = x86-64
-
-GPP = g++-4.8
-
 CPPFLAGS = -DIL_STD \
-	-isystem $(CPLEX_DIR)/include \
+	-isystem $(CPLEX_DIR)/cplex/include \
 	-isystem $(CPLEX_DIR)/concert/include
 
 CXXFLAGS += -Wall -Wextra -pedantic -Wno-non-virtual-dtor -pipe -std=c++11
 
-LDFLAGS = -L$(CPLEX_DIR)/lib/$(ARCH)_sles10_4.1/static_pic \
+LDFLAGS = -L$(CPLEX_DIR)/cplex/lib/$(ARCH)_sles10_4.1/static_pic \
 	-L$(CPLEX_DIR)/concert/lib/$(ARCH)_sles10_4.1/static_pic
 
 LDFLAGS += -lilocplex -lcplex -lconcert -lpthread
