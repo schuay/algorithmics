@@ -16,13 +16,13 @@ OBJDIR = obj
 # 32bit: x86, 64bit: x86-64
 ARCH = x86-64
 
-GPP = g++-4.6
+GPP = g++-4.8
 
 CPPFLAGS = -DIL_STD \
 	-isystem $(CPLEX_DIR)/include \
 	-isystem $(CPLEX_DIR)/concert/include
 
-CXXFLAGS += -Wall -Wno-non-virtual-dtor -pipe -std=c++0x
+CXXFLAGS += -Wall -Wextra -pedantic -Wno-non-virtual-dtor -pipe -std=c++11
 
 LDFLAGS = -L$(CPLEX_DIR)/lib/$(ARCH)_sles10_4.1/static_pic \
 	-L$(CPLEX_DIR)/concert/lib/$(ARCH)_sles10_4.1/static_pic
