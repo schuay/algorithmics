@@ -1,5 +1,22 @@
 #include "kMST_ILP.h"
 
+class Variables
+{
+public:
+	virtual ~Variables() { }
+	virtual void print(IloCplex &cplex) = 0;
+};
+
+class MTZVariables : public Variables
+{
+public:
+	~MTZVariables();
+	void print(IloCplex &cplex);
+
+	IloBoolVarArray xs;
+	IloIntVarArray us;
+};
+
 kMST_ILP::kMST_ILP( Instance& _instance, string _model_type, int _k ) :
 	instance( _instance ), model_type( _model_type ), k( _k )
 {
@@ -15,10 +32,12 @@ void kMST_ILP::solve()
 		env = IloEnv();
 		model = IloModel( env );
 
+		Variables *vars;
+
 		// add model-specific constraints
-		if( model_type == "scf" ) modelSCF();
-		else if( model_type == "mcf" ) modelMCF();
-		else if( model_type == "mtz" ) modelMTZ();
+		if( model_type == "scf" ) vars = modelSCF();
+		else if( model_type == "mcf" ) vars = modelMCF();
+		else if( model_type == "mtz" ) vars = modelMTZ();
 		else {
 			cerr << "No existing model chosen\n";
 			exit( -1 );
@@ -39,6 +58,9 @@ void kMST_ILP::solve()
 		cout << "Branch-and-Bound nodes: " << cplex.getNnodes() << "\n";
 		cout << "Objective value: " << cplex.getObjValue() << "\n";
 		cout << "CPU time: " << Tools::CPUtime() << "\n\n";
+
+		vars->print(cplex);
+		delete vars;
 	}
 	catch( IloException& e ) {
 		cerr << "kMST_ILP: exception " << e << "\n";
@@ -61,18 +83,20 @@ void kMST_ILP::setCPLEXParameters()
 	cplex.setParam( IloCplex::Threads, 1 );
 }
 
-void kMST_ILP::modelSCF()
+Variables *kMST_ILP::modelSCF()
 {
 	// ++++++++++++++++++++++++++++++++++++++++++
 	// TODO build single commodity flow model
 	// ++++++++++++++++++++++++++++++++++++++++++
+	return NULL;
 }
 
-void kMST_ILP::modelMCF()
+Variables *kMST_ILP::modelMCF()
 {
 	// ++++++++++++++++++++++++++++++++++++++++++
 	// TODO build multi commodity flow model
 	// ++++++++++++++++++++++++++++++++++++++++++
+	return NULL;
 }
 
 /* Turns the given edge vector into a vector containing both the original
@@ -89,23 +113,25 @@ static vector<Instance::Edge> directed_edges(const vector<Instance::Edge> &es)
 	return des;
 }
 
-void kMST_ILP::modelMTZ()
+Variables *kMST_ILP::modelMTZ()
 {
+	MTZVariables *v = new MTZVariables();
+
 	const vector<Instance::Edge> edges = directed_edges(instance.edges);
 	const u_int n_edges = edges.size();
 
 	/* $x_{ij} \in \{0, 1\}$ variables denote whether edge (i, j) is active. */
-	IloBoolVarArray xs(env, n_edges);
+	v->xs = IloBoolVarArray(env, n_edges);
 	for (u_int k = 0; k < n_edges; k++) {
 		const u_int i = edges[k].v1;
 		const u_int j = edges[k].v2;
-		xs[k] = IloBoolVar(env, Tools::indicesToString("x", i, j).c_str());
+		v->xs[k] = IloBoolVar(env, Tools::indicesToString("x", i, j).c_str());
 	}
 
 	/* $u_i \in [0, k]$ variables are used to impose an order on nodes. */
-	IloIntVarArray us(env, instance.n_nodes);
+	v->us = IloIntVarArray(env, instance.n_nodes);
 	for (u_int i = 0; i < instance.n_nodes; i++) {
-		us[i] = IloIntVar(env, 0, k, Tools::indicesToString("u", i).c_str());
+		v->us[i] = IloIntVar(env, 0, k, Tools::indicesToString("u", i).c_str());
 	}
 
 	/* $\sum_{i, j > 0} x_{ij} = k - 1$. There are exactly k - 1 edges not
@@ -120,11 +146,11 @@ void kMST_ILP::modelMTZ()
 		const u_int j = edges[k].v2;
 
 		if (i == 0) {
-			e1 += xs[k];
+			e1 += v->xs[k];
 		} else if (j == 0) {
-			e2 += xs[k];
+			e2 += v->xs[k];
 		} else {
-			e0 += xs[k];
+			e0 += v->xs[k];
 		}
 	}
 	model.add(e0 == k - 1);
@@ -136,18 +162,18 @@ void kMST_ILP::modelMTZ()
 
 	/* $u_0 = 0$. Set level of artificial root 0 to 0. */
 	IloExpr e3(env);
-	e3 += us[0];
+	e3 += v->us[0];
 	model.add(e3 == 0);
 	e3.end();
 
 	/* $\forall i, j: u_i + x_{ij} \leq u_j + (1 - x_{ij})k$.
-	 * Enforce order hierarchy on nodes. Note the usage of instance.n_edges here. */
+	 * Enforce order hierarchy on nodes. Note the v->usage of instance.n_edges here. */
 	for (u_int k = 0; k < instance.n_edges; k++) {
 		const u_int i = edges[k].v1;
 		const u_int j = edges[k].v2;
 
 		IloExpr e4(env);
-		e4 = us[i] + xs[k] - us[j] - (-xs[k + instance.n_edges] + 1) * this->k;
+		e4 = v->us[i] + v->xs[k] - v->us[j] - (-v->xs[k + instance.n_edges] + 1) * this->k;
 		model.add(e4 <= 0);
 		e4.end();
 	}
@@ -155,10 +181,12 @@ void kMST_ILP::modelMTZ()
 	/* $\sum_{i, j} c_{ij} x_{ij}$ is our minimization function. */
 	IloExpr e5(env);
 	for (u_int k = 0; k < n_edges; k++) {
-		e5 += xs[k] * edges[k].weight;
+		e5 += v->xs[k] * edges[k].weight;
 	}
 	model.add(IloMinimize(env, e5));
 	e5.end();
+
+	return v;
 }
 
 kMST_ILP::~kMST_ILP()
@@ -167,6 +195,31 @@ kMST_ILP::~kMST_ILP()
 	cplex.end();
 	model.end();
 	env.end();
+}
+
+MTZVariables::~MTZVariables()
+{
+	xs.end();
+	us.end();
+}
+
+void MTZVariables::print(IloCplex &cplex)
+{
+	for (u_int i = 0; i < xs.getSize(); i++) {
+		const int v = cplex.getValue(xs[i]);
+		if (v == 0) {
+			continue;
+		}
+		cout << xs[i] << " = " << v << endl;
+	}
+
+	for (u_int i = 0; i < us.getSize(); i++) {
+		const int v = cplex.getValue(us[i]);
+		if (v == 0) {
+			continue;
+		}
+		cout << us[i] << " = " << v << endl;
+	}
 }
 
 /* vim: set noet ts=4 sw=4: */

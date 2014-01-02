@@ -10,6 +10,8 @@ using namespace std;
 
 ILOSTLBEGIN
 
+class Variables;
+
 class kMST_ILP
 {
 
@@ -26,9 +28,9 @@ private:
 	IloModel model;
 	IloCplex cplex;
 
-	void modelSCF();
-	void modelMCF();
-	void modelMTZ();
+	Variables *modelSCF();
+	Variables *modelMCF();
+	Variables *modelMTZ();
 
 public:
 
