@@ -81,7 +81,7 @@ void kMST_ILP::setCPLEXParameters()
 	cplex.setParam( IloCplex::MIPInterval, 1 );
 	cplex.setParam( IloCplex::MIPDisplay, 2 );
 	// only use a single thread
-	cplex.setParam( IloCplex::Threads, 1 );
+	cplex.setParam( IloCplex::Threads, 0 );
 }
 
 Variables *kMST_ILP::modelSCF()
