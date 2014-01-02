@@ -77,9 +77,73 @@ void kMST_ILP::modelMCF()
 
 void kMST_ILP::modelMTZ()
 {
-	// ++++++++++++++++++++++++++++++++++++++++++
-	// TODO build Miller-Tucker-Zemlin model
-	// ++++++++++++++++++++++++++++++++++++++++++
+	/* $x_{ij} \in \{0, 1\}$ variables denote whether edge (i, j) is active. */
+	IloBoolVarArray xs(env, instance.n_edges);
+	for (u_int k = 0; k < instance.n_edges; k++) {
+		const u_int i = instance.edges[k].v1;
+		const u_int j = instance.edges[k].v2;
+		xs[k] = IloBoolVar(env, Tools::indicesToString("x", i, j).c_str());
+	}
+
+	/* $u_i \in [0, k]$ variables are used to impose an order on nodes. */
+	IloIntVarArray us(env, instance.n_nodes);
+	for (u_int i = 0; i < instance.n_nodes; i++) {
+		us[i] = IloIntVar(env, 0, k, Tools::indicesToString("u", i).c_str());
+	}
+
+	/* $\sum_{i, j > 0} x_{ij} = k - 1$. There are exactly k - 1 edges not
+	 * counting edges from the artificial root node 0. 
+	 * $\sum_j x_{0j} = 1$. Exactly one node is chosen as the tree root. 
+	 * $\sum_i x_{i0} = 0$. No edge leads back to the artificial root node 0. */
+	IloExpr e0(env);
+	IloExpr e1(env);
+	IloExpr e2(env);
+	for (u_int k = 0; k < instance.n_edges; k++) {
+		const u_int i = instance.edges[k].v1;
+		const u_int j = instance.edges[k].v2;
+
+		if (i == 0) {
+			e1 += xs[k];
+		} else if (j == 0) {
+			e2 += xs[k];
+		} else {
+			e0 += xs[k];
+		}
+	}
+	model.add(e0 == k - 1);
+	model.add(e1 == 1);
+	model.add(e2 == 0);
+	e0.end();
+	e1.end();
+	e2.end();
+
+	/* $u_0 = 0$. Set level of artificial root 0 to 0. */
+	IloExpr e3(env);
+	e3 += us[0];
+	model.add(e3 == 0);
+	e3.end();
+
+	/* $\forall i, j: u_i + x_{ij} \leq u_j + (1 - x_{ij})k$.
+	 * Enforce order hierarchy on nodes. */
+	for (u_int k = 0; k < instance.n_edges; k++) {
+		const u_int i = instance.edges[k].v1;
+		const u_int j = instance.edges[k].v2;
+
+		IloExpr e4(env);
+		e4 = us[i] + xs[k] - us[j] - (-xs[k + instance.n_edges] + 1) * this->k;
+		model.add(e4 <= 0);
+		e4.end();
+	}
+
+	/* $\sum_{i, j} c_{ij} x_{ij}$ is our minimization function. */
+	IloExpr e5(env);
+	for (u_int k = 0; k < instance.n_edges; k++) {
+		const int c = instance.edges[k].weight;
+
+		e5 += xs[k] * c;
+	}
+	model.add(IloMinimize(env, e5));
+	e5.end();
 }
 
 kMST_ILP::~kMST_ILP()
