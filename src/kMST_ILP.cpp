@@ -75,13 +75,30 @@ void kMST_ILP::modelMCF()
 	// ++++++++++++++++++++++++++++++++++++++++++
 }
 
+/* Turns the given edge vector into a vector containing both the original
+ * edges and their reverse directions. */
+static vector<Instance::Edge> directed_edges(const vector<Instance::Edge> &es)
+{
+	vector<Instance::Edge> des;
+	des.resize(es.size() * 2);
+
+	auto it = copy(es.cbegin(), es.cend(), des.begin());
+	transform(es.cbegin(), es.cend(), it, [](const Instance::Edge &e) {
+			Instance::Edge f = {e.v2, e.v1, e.weight}; return f; });
+
+	return des;
+}
+
 void kMST_ILP::modelMTZ()
 {
+	const vector<Instance::Edge> edges = directed_edges(instance.edges);
+	const u_int n_edges = edges.size();
+
 	/* $x_{ij} \in \{0, 1\}$ variables denote whether edge (i, j) is active. */
-	IloBoolVarArray xs(env, instance.n_edges);
-	for (u_int k = 0; k < instance.n_edges; k++) {
-		const u_int i = instance.edges[k].v1;
-		const u_int j = instance.edges[k].v2;
+	IloBoolVarArray xs(env, n_edges);
+	for (u_int k = 0; k < n_edges; k++) {
+		const u_int i = edges[k].v1;
+		const u_int j = edges[k].v2;
 		xs[k] = IloBoolVar(env, Tools::indicesToString("x", i, j).c_str());
 	}
 
@@ -98,9 +115,9 @@ void kMST_ILP::modelMTZ()
 	IloExpr e0(env);
 	IloExpr e1(env);
 	IloExpr e2(env);
-	for (u_int k = 0; k < instance.n_edges; k++) {
-		const u_int i = instance.edges[k].v1;
-		const u_int j = instance.edges[k].v2;
+	for (u_int k = 0; k < n_edges; k++) {
+		const u_int i = edges[k].v1;
+		const u_int j = edges[k].v2;
 
 		if (i == 0) {
 			e1 += xs[k];
@@ -124,10 +141,10 @@ void kMST_ILP::modelMTZ()
 	e3.end();
 
 	/* $\forall i, j: u_i + x_{ij} \leq u_j + (1 - x_{ij})k$.
-	 * Enforce order hierarchy on nodes. */
+	 * Enforce order hierarchy on nodes. Note the usage of instance.n_edges here. */
 	for (u_int k = 0; k < instance.n_edges; k++) {
-		const u_int i = instance.edges[k].v1;
-		const u_int j = instance.edges[k].v2;
+		const u_int i = edges[k].v1;
+		const u_int j = edges[k].v2;
 
 		IloExpr e4(env);
 		e4 = us[i] + xs[k] - us[j] - (-xs[k + instance.n_edges] + 1) * this->k;
@@ -137,10 +154,8 @@ void kMST_ILP::modelMTZ()
 
 	/* $\sum_{i, j} c_{ij} x_{ij}$ is our minimization function. */
 	IloExpr e5(env);
-	for (u_int k = 0; k < instance.n_edges; k++) {
-		const int c = instance.edges[k].weight;
-
-		e5 += xs[k] * c;
+	for (u_int k = 0; k < n_edges; k++) {
+		e5 += xs[k] * edges[k].weight;
 	}
 	model.add(IloMinimize(env, e5));
 	e5.end();
@@ -153,4 +168,5 @@ kMST_ILP::~kMST_ILP()
 	model.end();
 	env.end();
 }
+
 /* vim: set noet ts=4 sw=4: */
