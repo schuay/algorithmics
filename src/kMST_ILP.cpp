@@ -14,6 +14,7 @@ public:
 	void print(IloCplex &cplex);
 
 	IloBoolVarArray xs;
+	IloBoolVarArray vs;
 	IloIntVarArray us;
 };
 
@@ -59,7 +60,7 @@ void kMST_ILP::solve()
 		cout << "Objective value: " << cplex.getObjValue() << "\n";
 		cout << "CPU time: " << Tools::CPUtime() << "\n\n";
 
-		vars->print(cplex);
+		// vars->print(cplex);
 		delete vars;
 	}
 	catch( IloException& e ) {
@@ -128,10 +129,13 @@ Variables *kMST_ILP::modelMTZ()
 		v->xs[k] = IloBoolVar(env, Tools::indicesToString("x", i, j).c_str());
 	}
 
-	/* $u_i \in [0, k]$ variables are used to impose an order on nodes. */
+	/* $u_i \in [0, k]$ variables are used to impose an order on nodes.
+	 * $v_i \in \{0, 1\}$ variables denote whether node i is active. */
 	v->us = IloIntVarArray(env, instance.n_nodes);
+	v->vs = IloBoolVarArray(env, instance.n_nodes);
 	for (u_int i = 0; i < instance.n_nodes; i++) {
 		v->us[i] = IloIntVar(env, 0, k, Tools::indicesToString("u", i).c_str());
+		v->vs[i] = IloBoolVar(env, Tools::indicesToString("v", i).c_str());
 	}
 
 	/* $\sum_{i, j > 0} x_{ij} = k - 1$. There are exactly k - 1 edges not
@@ -178,13 +182,43 @@ Variables *kMST_ILP::modelMTZ()
 		e4.end();
 	}
 
-	/* $\sum_{i, j} c_{ij} x_{ij}$ is our minimization function. */
-	IloExpr e5(env);
-	for (u_int k = 0; k < n_edges; k++) {
-		e5 += v->xs[k] * edges[k].weight;
+	/* $\forall i: nv_i \geq \sum_j (x_{ij} + x{ji})$
+	 * $\forall i:  v_i \leq \sum_j (x_{ij} + x{ji})$
+	 * $\sum_{i > 0} v_i = k$. Ensure that exactly k nodes are active. */ 
+
+	IloExprArray e5s(env, instance.n_nodes);
+	for (u_int i = 0; i < instance.n_nodes; i++) {
+		e5s[i] = IloExpr(env);
 	}
-	model.add(IloMinimize(env, e5));
-	e5.end();
+
+	for (u_int k = 0; k < n_edges; k++) {
+		const u_int i = edges[k].v1;
+		const u_int j = edges[k].v2;
+
+		e5s[i] += v->xs[k];
+		e5s[j] += v->xs[k];
+	}
+
+	for (u_int i = 0; i < instance.n_nodes; i++) {
+		model.add(v->vs[i] * (int)instance.n_nodes >= e5s[i]);
+		model.add(v->vs[i] <= e5s[i]);
+		e5s[i].end();
+	}
+
+	IloExpr e6(env);
+	for (u_int i = 1; i < instance.n_nodes; i++) {
+		e6 += v->vs[i];
+	}
+	model.add(k == e6);
+	e6.end();
+
+	/* $\sum_{i, j} c_{ij} x_{ij}$ is our minimization function. */
+	IloExpr e7(env);
+	for (u_int k = 0; k < n_edges; k++) {
+		e7 += v->xs[k] * edges[k].weight;
+	}
+	model.add(IloMinimize(env, e7));
+	e7.end();
 
 	return v;
 }
@@ -200,6 +234,7 @@ kMST_ILP::~kMST_ILP()
 MTZVariables::~MTZVariables()
 {
 	xs.end();
+	vs.end();
 	us.end();
 }
 
@@ -211,6 +246,14 @@ void MTZVariables::print(IloCplex &cplex)
 			continue;
 		}
 		cout << xs[i] << " = " << v << endl;
+	}
+
+	for (u_int i = 0; i < vs.getSize(); i++) {
+		const int v = cplex.getValue(vs[i]);
+		if (v == 0) {
+			continue;
+		}
+		cout << vs[i] << " = " << v << endl;
 	}
 
 	for (u_int i = 0; i < us.getSize(); i++) {
