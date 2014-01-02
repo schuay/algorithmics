@@ -184,11 +184,14 @@ Variables *kMST_ILP::modelMTZ()
 
 	/* $\forall i: nv_i \geq \sum_j (x_{ij} + x{ji})$
 	 * $\forall i:  v_i \leq \sum_j (x_{ij} + x{ji})$
-	 * $\sum_{i > 0} v_i = k$. Ensure that exactly k nodes are active. */ 
+	 * $\sum_{i > 0} v_i = k$. Ensure that exactly k nodes are active.
+	 * $\forall j: \sum_i x_{ij} \leq 1$. At most one incoming edge per node. */
 
 	IloExprArray e5s(env, instance.n_nodes);
+	IloExprArray e6s(env, instance.n_nodes);
 	for (u_int i = 0; i < instance.n_nodes; i++) {
 		e5s[i] = IloExpr(env);
+		e6s[i] = IloExpr(env);
 	}
 
 	for (u_int k = 0; k < n_edges; k++) {
@@ -197,28 +200,32 @@ Variables *kMST_ILP::modelMTZ()
 
 		e5s[i] += v->xs[k];
 		e5s[j] += v->xs[k];
+
+		e6s[j] += v->xs[k];
 	}
 
 	for (u_int i = 0; i < instance.n_nodes; i++) {
 		model.add(v->vs[i] * (int)instance.n_nodes >= e5s[i]);
 		model.add(v->vs[i] <= e5s[i]);
+		model.add(e6s[i] <= 1);
 		e5s[i].end();
+		e6s[i].end();
 	}
 
-	IloExpr e6(env);
+	IloExpr e7(env);
 	for (u_int i = 1; i < instance.n_nodes; i++) {
-		e6 += v->vs[i];
+		e7 += v->vs[i];
 	}
-	model.add(k == e6);
-	e6.end();
+	model.add(k == e7);
+	e7.end();
 
 	/* $\sum_{i, j} c_{ij} x_{ij}$ is our minimization function. */
-	IloExpr e7(env);
+	IloExpr e8(env);
 	for (u_int k = 0; k < n_edges; k++) {
-		e7 += v->xs[k] * edges[k].weight;
+		e8 += v->xs[k] * edges[k].weight;
 	}
-	model.add(IloMinimize(env, e7));
-	e7.end();
+	model.add(IloMinimize(env, e8));
+	e8.end();
 
 	return v;
 }
