@@ -35,14 +35,21 @@ if __name__ == "__main__":
         for inst in INSTANCES:
             output = subprocess.check_output([BIN, "-f", DATADIR + inst[0],
                                               "-m", meth, "-k", str(inst[1])])
-            match = pattern.search(output)
-            actual = int(match.group(1))
             total += 1
+
+            command = "%s -f %s -m %s -k %d" % (BIN, DATADIR + inst[0], meth, inst[1])
+            match = pattern.search(output)
+            if not match:
+                print "'%s' failed. No result" % command
+                failed += 1
+                continue
+
+            actual = int(match.group(1))
             if actual != inst[2]:
-                print "'%s -f %s -m %s -k %d' failed. Expected %d, got %d" % (BIN, DATADIR + inst[0], meth, inst[1], inst[2], actual)
+                print "'%s' failed. Expected %d, got %d" % (command, inst[2], actual)
                 failed += 1
             else:
-                print "'%s -f %s -m %s -k %d' OK." % (BIN, DATADIR + inst[0], meth, inst[1])
+                print "'%s' OK." % command
 
     print "%d total, %d failed" % (total, failed)
 
