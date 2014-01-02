@@ -167,13 +167,13 @@ Variables *kMST_ILP::modelMTZ()
 	e3.end();
 
 	/* $\forall i, j: u_i + x_{ij} \leq u_j + (1 - x_{ij})k$.
-	 * Enforce order hierarchy on nodes. Note the v->usage of instance.n_edges here. */
-	for (u_int k = 0; k < instance.n_edges; k++) {
+	 * Enforce order hierarchy on nodes. */
+	for (u_int k = 0; k < n_edges; k++) {
 		const u_int i = edges[k].v1;
 		const u_int j = edges[k].v2;
 
 		IloExpr e4(env);
-		e4 = v->us[i] + v->xs[k] - v->us[j] - (-v->xs[k + instance.n_edges] + 1) * this->k;
+		e4 = v->us[i] + v->xs[k] - v->us[j] - (-v->xs[k] + 1) * this->k;
 		model.add(e4 <= 0);
 		e4.end();
 	}
