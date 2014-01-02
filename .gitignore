@@ -1,3 +1,4 @@
 *.swp
+gmon.out
 kmst
 vars.in
