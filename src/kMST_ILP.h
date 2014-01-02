@@ -1,9 +1,10 @@
 #ifndef __K_MST_ILP__H__
 #define __K_MST_ILP__H__
 
-#include "Tools.h"
-#include "Instance.h"
 #include <ilcplex/ilocplex.h>
+
+#include "Instance.h"
+#include "Tools.h"
 
 using namespace std;
 

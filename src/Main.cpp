@@ -2,8 +2,9 @@
 #define __MAIN__CPP__
 
 #include <iostream>
-#include "Tools.h"
+
 #include "Instance.h"
+#include "Tools.h"
 #include "kMST_ILP.h"
 
 using namespace std;
@@ -17,11 +18,10 @@ void usage()
 
 int main( int argc, char *argv[] )
 {
-	// read parameters
-	int opt;
-	// default values
 	string file( "data/g01.dat" );
 	string model_type( "flow" );
+
+	int opt;
 	int k = 5;
 	while( (opt = getopt( argc, argv, "f:m:k:" )) != EOF ) {
 		switch( opt ) {
@@ -39,8 +39,10 @@ int main( int argc, char *argv[] )
 				break;
 		}
 	}
+
 	// read instance
 	Instance instance( file );
+
 	// solve instance
 	kMST_ILP ilp( instance, model_type, k );
 	ilp.solve();
