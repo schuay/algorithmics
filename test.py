@@ -28,6 +28,7 @@ DATADIR = "data/"
 
 if __name__ == "__main__":
     pattern = re.compile("Objective value:\s*(\d+)")
+    duration_pattern = re.compile("CPU time:\s*(\d+(?:\.\d+)?)")
 
     total = 0
     failed = 0
@@ -44,12 +45,13 @@ if __name__ == "__main__":
                 failed += 1
                 continue
 
+            duration = float(duration_pattern.search(output).group(1))
             actual = int(match.group(1))
             if actual != inst[2]:
                 print "'%s' failed. Expected %d, got %d" % (command, inst[2], actual)
                 failed += 1
             else:
-                print "'%s' OK." % command
+                print "'%s' OK in %.2f s." % (command, duration)
 
     print "%d total, %d failed" % (total, failed)
 
