@@ -35,3 +35,4 @@ public:
 // Instance
 
 #endif //__INSTANCE__H__
+/* vim: set noet ts=4 sw=4: */

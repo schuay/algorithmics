@@ -43,3 +43,4 @@ private:
 // kMST_ILP
 
 #endif //__K_MST_ILP__H__
+/* vim: set noet ts=4 sw=4: */

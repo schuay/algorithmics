@@ -49,3 +49,5 @@ int main( int argc, char *argv[] )
 } // main
 
 #endif // __MAIN__CPP__
+
+/* vim: set noet ts=4 sw=4: */

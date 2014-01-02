@@ -89,3 +89,4 @@ kMST_ILP::~kMST_ILP()
 	model.end();
 	env.end();
 }
+/* vim: set noet ts=4 sw=4: */

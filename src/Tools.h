@@ -27,3 +27,4 @@ namespace Tools
 // Tools
 
 #endif // __TOOLS__H__
+/* vim: set noet ts=4 sw=4: */

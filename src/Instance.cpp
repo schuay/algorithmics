@@ -35,3 +35,4 @@ Instance::Instance( string file ) :
 		cout << "\n";
 	}
 }
+/* vim: set noet ts=4 sw=4: */
