@@ -15,8 +15,8 @@ CPPFLAGS = -DIL_STD \
 
 CXXFLAGS += -Wall -Wextra -pedantic -Wno-non-virtual-dtor -pipe -std=c++11
 
-LDFLAGS = -L$(CPLEX_DIR)/cplex/lib/$(ARCH)_sles10_4.1/static_pic \
-	-L$(CPLEX_DIR)/concert/lib/$(ARCH)_sles10_4.1/static_pic
+LDFLAGS = -L$(CPLEX_DIR)/cplex/lib/$(ARCH)/static_pic \
+	-L$(CPLEX_DIR)/concert/lib/$(ARCH)/static_pic
 
 LDFLAGS += -lilocplex -lcplex -lconcert -lpthread
 
