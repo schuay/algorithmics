@@ -111,10 +111,123 @@ static vector<Instance::Edge> directed_edges(const vector<Instance::Edge> &es)
 
 Variables *kMST_ILP::modelSCF()
 {
-	// ++++++++++++++++++++++++++++++++++++++++++
-	// TODO build single commodity flow model
-	// ++++++++++++++++++++++++++++++++++++++++++
-	return NULL;
+	SCFVariables *v = new SCFVariables();
+
+	const vector<Instance::Edge> edges = directed_edges(instance.edges);
+	const u_int n_edges = edges.size();
+
+	/* $x_{ij} \in \{0, 1\}$ variables denote whether edge (i, j) is active.
+	 * $f_{ij} \in [0, k - 1]$ variables denote the number of goods on edge (i, j). */
+	v->xs = IloBoolVarArray(env, n_edges);
+	v->fs = IloIntVarArray(env, n_edges);
+	for (u_int k = 0; k < n_edges; k++) {
+		const u_int i = edges[k].v1;
+		const u_int j = edges[k].v2;
+		v->xs[k] = IloBoolVar(env, Tools::indicesToString("x", i, j).c_str());
+		v->fs[k] = IloIntVar(env, 0, k - 1, Tools::indicesToString("f", i, j).c_str());
+	}
+
+	/* $v_i \in \{0, 1\}$ variables denote whether node i is active. */
+	v->vs = IloBoolVarArray(env, instance.n_nodes);
+	for (u_int i = 0; i < instance.n_nodes; i++) {
+		v->vs[i] = IloBoolVar(env, Tools::indicesToString("v", i).c_str());
+	}
+
+	/* $\sum_{i, j > 0} x_{ij} = k - 1$. There are exactly k - 1 edges not
+	 * counting edges from the artificial root node 0. 
+	 * $\sum_j x_{0j} = 1$. Exactly one node is chosen as the tree root. 
+	 * $\sum_i x_{i0} = 0$. No edge leads back to the artificial root node 0. */
+	IloExpr e_num_edges(env);
+	IloExpr e_single_root(env);
+	IloExpr e_avoid_v0(env);
+	for (u_int k = 0; k < n_edges; k++) {
+		const u_int i = edges[k].v1;
+		const u_int j = edges[k].v2;
+
+		if (i == 0) {
+			e_single_root += v->xs[k];
+		} else if (j == 0) {
+			e_avoid_v0 += v->xs[k];
+		} else {
+			e_num_edges += v->xs[k];
+		}
+	}
+	model.add(e_num_edges == k - 1);
+	model.add(e_single_root == 1);
+	model.add(e_avoid_v0 == 0);
+	e_num_edges.end();
+	e_single_root.end();
+	e_avoid_v0.end();
+
+	/* $\forall i: nv_i \geq \sum_j (x_{ij} + x{ji})$
+	 * $\forall i:  v_i \leq \sum_j (x_{ij} + x{ji})$
+	 * $\sum_{i > 0} v_i = k$. Ensure that exactly k nodes are active.
+	 * $\forall j: \sum_i x_{ij} \leq 1$. At most one incoming edge per node. */
+
+	IloExprArray e_v_bounds(env, instance.n_nodes);
+	IloExprArray e_in_degree(env, instance.n_nodes);
+	for (u_int i = 0; i < instance.n_nodes; i++) {
+		e_v_bounds[i] = IloExpr(env);
+		e_in_degree[i] = IloExpr(env);
+	}
+
+	for (u_int k = 0; k < n_edges; k++) {
+		const u_int i = edges[k].v1;
+		const u_int j = edges[k].v2;
+
+		e_v_bounds[i] += v->xs[k];
+		e_v_bounds[j] += v->xs[k];
+
+		e_in_degree[j] += v->xs[k];
+	}
+
+	for (u_int i = 0; i < instance.n_nodes; i++) {
+		model.add(v->vs[i] * (int)instance.n_nodes >= e_v_bounds[i]);
+		model.add(v->vs[i] <= e_v_bounds[i]);
+		model.add(e_in_degree[i] <= 1);
+		e_v_bounds[i].end();
+		e_in_degree[i].end();
+	}
+
+	IloExpr e_num_nodes(env);
+	for (u_int i = 1; i < instance.n_nodes; i++) {
+		e_num_nodes += v->vs[i];
+	}
+	model.add(k == e_num_nodes);
+	e_num_nodes.end();
+
+	/* $\sum_j f_{0j} = k - 1$. The artificial root sends k - 1 goods.
+	 * $\forall i: f_{i0} = 0$. No goods are transmitted to the artificial root.
+	 * $\forall i, j: f_{ij} \leq (k - 1)x_{ij}$. Only active edges transport goods. */
+
+	IloExpr e_aroot_tx(env);
+	for (u_int k = 0; k < n_edges; k++) {
+		const u_int i = edges[k].v1;
+		const u_int j = edges[k].v2;
+
+		if (i == 0) {
+			e_aroot_tx += v->fs[k];
+		} else if (j == 0) {
+			IloExpr e_aroot_rx(env);
+			e_aroot_rx += v->fs[k];
+			model.add(e_aroot_rx == 0);
+		}
+
+		IloExpr e_active_goods(env);
+		e_active_goods = v->fs[k] - v->xs[k] * (int)(k - 1);
+		model.add(e_active_goods <= 0);
+	}
+	model.add(e_aroot_tx == k - 1);
+
+	/* $\sum_{i, j} c_{ij} x_{ij}$ is our minimization function. */
+	IloExpr e_objective(env);
+	for (u_int k = 0; k < n_edges; k++) {
+		e_objective += v->xs[k] * edges[k].weight;
+	}
+	model.add(IloMinimize(env, e_objective));
+	e_objective.end();
+
+	return v;
 }
 
 Variables *kMST_ILP::modelMCF()
