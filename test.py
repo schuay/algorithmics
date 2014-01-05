@@ -3,6 +3,8 @@
 import subprocess
 import re
 
+from optparse import OptionParser
+
 INSTANCES = [ ["g01.dat", 2, 46]
             , ["g01.dat", 5, 477]
             , ["g02.dat", 4, 373]
@@ -27,12 +29,24 @@ BIN = "./kmst"
 DATADIR = "data/"
 
 if __name__ == "__main__":
+    parser = OptionParser()
+    parser.add_option("-m", "--model", dest = "models",
+            help = "One of ['mtz', 'mcf', 'scf']", action = "append")
+    (options, args) = parser.parse_args()
+
+    if options.models:
+        for m in options.models:
+            if m not in METHODS:
+                parser.error("Invalid model passed")
+    else:
+        options.models = METHODS
+
     pattern = re.compile("Objective value:\s*(\d+)")
     duration_pattern = re.compile("CPU time:\s*(\d+(?:\.\d+)?)")
 
     total = 0
     failed = 0
-    for meth in METHODS:
+    for meth in options.models:
         for inst in INSTANCES:
             output = subprocess.check_output([BIN, "-f", DATADIR + inst[0],
                                               "-m", meth, "-k", str(inst[1])])
