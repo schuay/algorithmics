@@ -18,6 +18,17 @@ public:
 	IloIntVarArray us;
 };
 
+class SCFVariables : public Variables
+{
+public:
+	~SCFVariables();
+	void print(IloCplex &cplex);
+
+	IloBoolVarArray xs;
+	IloBoolVarArray vs;
+	IloIntVarArray fs;
+};
+
 kMST_ILP::kMST_ILP( Instance& _instance, string _model_type, int _k ) :
 	instance( _instance ), model_type( _model_type ), k( _k )
 {
@@ -261,6 +272,20 @@ void MTZVariables::print(IloCplex &cplex)
 	print_values(cplex, &xs);
 	print_values(cplex, &vs);
 	print_values(cplex, &us);
+}
+
+SCFVariables::~SCFVariables()
+{
+	xs.end();
+	vs.end();
+	fs.end();
+}
+
+void SCFVariables::print(IloCplex &cplex)
+{
+	print_values(cplex, &xs);
+	print_values(cplex, &vs);
+	print_values(cplex, &fs);
 }
 
 /* vim: set noet ts=4 sw=4: */
