@@ -198,28 +198,22 @@ Variables *kMST_ILP::modelSCF()
 	model.add(k == e_num_nodes);
 	e_num_nodes.end();
 
-	/* $\sum_j f_{0j} = k$. The artificial root sends k goods.
-	 * $\forall i: f_{i0} = 0$. No goods are transmitted to the artificial root.
-	 * $\forall i, j: f_{ij} \leq kx_{ij}$. Only active edges transport goods. */
+	/* $\forall i, j \neq 0: f_{ij} \leq kx_{ij}$. Only active edges transport goods.
+	 * $\forall i, j s.t. i or j is 0: f_{ij} = kx_{ij}$. Only a single edge
+	 * incident on the artificial root transports goods. */
 
-	IloExpr e_aroot_tx(env);
 	for (u_int k = 0; k < n_edges; k++) {
 		const u_int i = edges[k].v1;
 		const u_int j = edges[k].v2;
 
-		if (i == 0) {
-			e_aroot_tx += v->fs[k];
-		} else if (j == 0) {
-			IloExpr e_aroot_rx(env);
-			e_aroot_rx += v->fs[k];
-			model.add(e_aroot_rx == 0);
-		}
-
 		IloExpr e_active_goods(env);
-		e_active_goods = v->fs[k] - v->xs[k] * (int)k;
-		model.add(e_active_goods <= 0);
+		e_active_goods = v->fs[k] - v->xs[k] * this->k;
+		if (i == 0 || j == 0) {
+			model.add(e_active_goods == 0);
+		} else {
+			model.add(e_active_goods <= 0);
+		}
 	}
-	model.add(e_aroot_tx == k);
 
 	/* $\forall j: \sum_i f_{ij} - \sum_k f_{jk} = v_i$.
 	 * Each active node consumes one unit. */
