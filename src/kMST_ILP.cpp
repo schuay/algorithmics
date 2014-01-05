@@ -153,27 +153,27 @@ Variables *kMST_ILP::modelMTZ()
 	 * counting edges from the artificial root node 0. 
 	 * $\sum_j x_{0j} = 1$. Exactly one node is chosen as the tree root. 
 	 * $\sum_i x_{i0} = 0$. No edge leads back to the artificial root node 0. */
-	IloExpr e0(env);
-	IloExpr e1(env);
-	IloExpr e2(env);
+	IloExpr e_num_edges(env);
+	IloExpr e_single_root(env);
+	IloExpr e_avoid_v0(env);
 	for (u_int k = 0; k < n_edges; k++) {
 		const u_int i = edges[k].v1;
 		const u_int j = edges[k].v2;
 
 		if (i == 0) {
-			e1 += v->xs[k];
+			e_single_root += v->xs[k];
 		} else if (j == 0) {
-			e2 += v->xs[k];
+			e_avoid_v0 += v->xs[k];
 		} else {
-			e0 += v->xs[k];
+			e_num_edges += v->xs[k];
 		}
 	}
-	model.add(e0 == k - 1);
-	model.add(e1 == 1);
-	model.add(e2 == 0);
-	e0.end();
-	e1.end();
-	e2.end();
+	model.add(e_num_edges == k - 1);
+	model.add(e_single_root == 1);
+	model.add(e_avoid_v0 == 0);
+	e_num_edges.end();
+	e_single_root.end();
+	e_avoid_v0.end();
 
 	/* $u_0 = 0$. Set level of artificial root 0 to 0. */
 	IloExpr e3(env);
@@ -198,45 +198,45 @@ Variables *kMST_ILP::modelMTZ()
 	 * $\sum_{i > 0} v_i = k$. Ensure that exactly k nodes are active.
 	 * $\forall j: \sum_i x_{ij} \leq 1$. At most one incoming edge per node. */
 
-	IloExprArray e5s(env, instance.n_nodes);
-	IloExprArray e6s(env, instance.n_nodes);
+	IloExprArray e_v_bounds(env, instance.n_nodes);
+	IloExprArray e_in_degree(env, instance.n_nodes);
 	for (u_int i = 0; i < instance.n_nodes; i++) {
-		e5s[i] = IloExpr(env);
-		e6s[i] = IloExpr(env);
+		e_v_bounds[i] = IloExpr(env);
+		e_in_degree[i] = IloExpr(env);
 	}
 
 	for (u_int k = 0; k < n_edges; k++) {
 		const u_int i = edges[k].v1;
 		const u_int j = edges[k].v2;
 
-		e5s[i] += v->xs[k];
-		e5s[j] += v->xs[k];
+		e_v_bounds[i] += v->xs[k];
+		e_v_bounds[j] += v->xs[k];
 
-		e6s[j] += v->xs[k];
+		e_in_degree[j] += v->xs[k];
 	}
 
 	for (u_int i = 0; i < instance.n_nodes; i++) {
-		model.add(v->vs[i] * (int)instance.n_nodes >= e5s[i]);
-		model.add(v->vs[i] <= e5s[i]);
-		model.add(e6s[i] <= 1);
-		e5s[i].end();
-		e6s[i].end();
+		model.add(v->vs[i] * (int)instance.n_nodes >= e_v_bounds[i]);
+		model.add(v->vs[i] <= e_v_bounds[i]);
+		model.add(e_in_degree[i] <= 1);
+		e_v_bounds[i].end();
+		e_in_degree[i].end();
 	}
 
-	IloExpr e7(env);
+	IloExpr e_num_nodes(env);
 	for (u_int i = 1; i < instance.n_nodes; i++) {
-		e7 += v->vs[i];
+		e_num_nodes += v->vs[i];
 	}
-	model.add(k == e7);
-	e7.end();
+	model.add(k == e_num_nodes);
+	e_num_nodes.end();
 
 	/* $\sum_{i, j} c_{ij} x_{ij}$ is our minimization function. */
-	IloExpr e8(env);
+	IloExpr e_objective(env);
 	for (u_int k = 0; k < n_edges; k++) {
-		e8 += v->xs[k] * edges[k].weight;
+		e_objective += v->xs[k] * edges[k].weight;
 	}
-	model.add(IloMinimize(env, e8));
-	e8.end();
+	model.add(IloMinimize(env, e_objective));
+	e_objective.end();
 
 	return v;
 }
