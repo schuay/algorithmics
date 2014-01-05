@@ -238,6 +238,17 @@ kMST_ILP::~kMST_ILP()
 	env.end();
 }
 
+static void print_values(IloCplex &cplex, const IloIntVarArray *xs)
+{
+	for (u_int i = 0; i < xs->getSize(); i++) {
+		const int v = cplex.getValue((*xs)[i]);
+		if (v == 0) {
+			continue;
+		}
+		cout << (*xs)[i] << " = " << v << endl;
+	}
+}
+
 MTZVariables::~MTZVariables()
 {
 	xs.end();
@@ -247,29 +258,9 @@ MTZVariables::~MTZVariables()
 
 void MTZVariables::print(IloCplex &cplex)
 {
-	for (u_int i = 0; i < xs.getSize(); i++) {
-		const int v = cplex.getValue(xs[i]);
-		if (v == 0) {
-			continue;
-		}
-		cout << xs[i] << " = " << v << endl;
-	}
-
-	for (u_int i = 0; i < vs.getSize(); i++) {
-		const int v = cplex.getValue(vs[i]);
-		if (v == 0) {
-			continue;
-		}
-		cout << vs[i] << " = " << v << endl;
-	}
-
-	for (u_int i = 0; i < us.getSize(); i++) {
-		const int v = cplex.getValue(us[i]);
-		if (v == 0) {
-			continue;
-		}
-		cout << us[i] << " = " << v << endl;
-	}
+	print_values(cplex, &xs);
+	print_values(cplex, &vs);
+	print_values(cplex, &us);
 }
 
 /* vim: set noet ts=4 sw=4: */
