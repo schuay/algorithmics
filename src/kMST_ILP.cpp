@@ -1,5 +1,7 @@
 #include "kMST_ILP.h"
 
+#include <assert.h>
+
 class Variables
 {
 public:
@@ -218,6 +220,29 @@ Variables *kMST_ILP::modelSCF()
 		model.add(e_active_goods <= 0);
 	}
 	model.add(e_aroot_tx == k - 1);
+
+	/* $\forall j: \sum_i f_{ij} - \sum_k f_{jk} = v_i$.
+	 * Each active node consumes one unit. */
+
+	for (u_int x = 1; x < instance.n_nodes; x++) {
+		IloExpr e_node_consumption(env);
+		for (const u_int ind : instance.incidentEdges[x]) {
+			const u_int i = edges[ind].v1;
+			const u_int j = edges[ind].v2;
+
+			if (i == x) {
+				e_node_consumption += v->fs[ind + instance.n_edges];
+				e_node_consumption -= v->fs[ind];
+			} else if (j == x) {
+				e_node_consumption += v->fs[ind];
+				e_node_consumption -= v->fs[ind + instance.n_edges];
+			} else {
+				assert(false);
+			}
+		}
+		e_node_consumption -= v->vs[x];
+		model.add(e_node_consumption == 0);
+	}
 
 	/* $\sum_{i, j} c_{ij} x_{ij}$ is our minimization function. */
 	IloExpr e_objective(env);
