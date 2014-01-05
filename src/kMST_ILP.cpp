@@ -95,6 +95,20 @@ void kMST_ILP::setCPLEXParameters()
 	cplex.setParam( IloCplex::Threads, 0 );
 }
 
+/* Turns the given edge vector into a vector containing both the original
+ * edges and their reverse directions. */
+static vector<Instance::Edge> directed_edges(const vector<Instance::Edge> &es)
+{
+	vector<Instance::Edge> des;
+	des.resize(es.size() * 2);
+
+	auto it = copy(es.cbegin(), es.cend(), des.begin());
+	transform(es.cbegin(), es.cend(), it, [](const Instance::Edge &e) {
+			Instance::Edge f = {e.v2, e.v1, e.weight}; return f; });
+
+	return des;
+}
+
 Variables *kMST_ILP::modelSCF()
 {
 	// ++++++++++++++++++++++++++++++++++++++++++
@@ -109,20 +123,6 @@ Variables *kMST_ILP::modelMCF()
 	// TODO build multi commodity flow model
 	// ++++++++++++++++++++++++++++++++++++++++++
 	return NULL;
-}
-
-/* Turns the given edge vector into a vector containing both the original
- * edges and their reverse directions. */
-static vector<Instance::Edge> directed_edges(const vector<Instance::Edge> &es)
-{
-	vector<Instance::Edge> des;
-	des.resize(es.size() * 2);
-
-	auto it = copy(es.cbegin(), es.cend(), des.begin());
-	transform(es.cbegin(), es.cend(), it, [](const Instance::Edge &e) {
-			Instance::Edge f = {e.v2, e.v1, e.weight}; return f; });
-
-	return des;
 }
 
 Variables *kMST_ILP::modelMTZ()
