@@ -161,7 +161,7 @@ Variables *kMST_ILP::modelSCF()
 	e_single_root.end();
 	e_avoid_v0.end();
 
-	/* $\forall i: nv_i \geq \sum_j (x_{ij})$. Inactive nodes have no outgoing active edges.
+	/* $\forall i: kv_i \geq \sum_j (x_{ij})$. Inactive nodes have no outgoing active edges, active ones at most k.
 	 * $\forall i:  v_i \leq \sum_j (x_{ij} + x{ji})$. Active nodes have at least one active edge.
 	 * $\sum_{i > 0} v_i = k$. Ensure that exactly k nodes are active.
 	 * $\forall j>0: \sum_i x_{ij} = v_j$. Exactly one incoming edge for an
@@ -183,7 +183,7 @@ Variables *kMST_ILP::modelSCF()
 	}
 
 	for (u_int i = 0; i < instance.n_nodes; i++) {
-		model.add(v->vs[i] * (int)instance.n_nodes >= e_out_degree[i]);
+		model.add(v->vs[i] * k >= e_out_degree[i]);
 		model.add(v->vs[i] <= e_out_degree[i] + e_in_degree[i]); 
 		if (i == 0){
 			//do not add a constraint for in-degree of artificial root node (that's handled elsewhere)
