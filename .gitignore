@@ -2,3 +2,4 @@
 gmon.out
 kmst
 vars.in
+*.cpp~
