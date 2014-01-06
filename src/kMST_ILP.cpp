@@ -164,7 +164,8 @@ Variables *kMST_ILP::modelSCF()
 	/* $\forall i: nv_i \geq \sum_j (x_{ij} + x{ji})$
 	 * $\forall i:  v_i \leq \sum_j (x_{ij} + x{ji})$
 	 * $\sum_{i > 0} v_i = k$. Ensure that exactly k nodes are active.
-	 * $\forall j: \sum_i x_{ij} \leq 1$. At most one incoming edge per node. */
+	 * $\forall j>0: \sum_i x_{ij} = v_j$. exactly one incoming edge per active node 
+											(except artificial root). */
 
 	IloExprArray e_v_bounds(env, instance.n_nodes);
 	IloExprArray e_in_degree(env, instance.n_nodes);
@@ -186,7 +187,10 @@ Variables *kMST_ILP::modelSCF()
 	for (u_int i = 0; i < instance.n_nodes; i++) {
 		model.add(v->vs[i] * (int)instance.n_nodes >= e_v_bounds[i]);
 		model.add(v->vs[i] <= e_v_bounds[i]);
-		model.add(e_in_degree[i] <= 1);
+		if (i > 0){
+			//don't add in-degree constraint for artificial root node
+			model.add(e_in_degree[i] == v->vs[i]);
+		}
 		e_v_bounds[i].end();
 		e_in_degree[i].end();
 	}
@@ -325,10 +329,11 @@ Variables *kMST_ILP::modelMTZ()
 		e4.end();
 	}
 
-	/* $\forall i: nv_i \geq \sum_j (x_{ij} + x{ji})$
-	 * $\forall i:  v_i \leq \sum_j (x_{ij} + x{ji})$
+	/* $\forall i: nv_i \geq \sum_j (x_{ij} + x{ji})$. Inactive nodes have no active edges.
+	 * $\forall i:  v_i \leq \sum_j (x_{ij} + x{ji})$. Active nodes have at least one active edge.
 	 * $\sum_{i > 0} v_i = k$. Ensure that exactly k nodes are active.
-	 * $\forall j: \sum_i x_{ij} \leq 1$. At most one incoming edge per node. */
+	 * $\forall j>0: \sum_i x_{ij} = v_j$. exactly one incoming edge per active node 
+											(except artificial root). */
 
 	IloExprArray e_v_bounds(env, instance.n_nodes);
 	IloExprArray e_in_degree(env, instance.n_nodes);
@@ -350,7 +355,12 @@ Variables *kMST_ILP::modelMTZ()
 	for (u_int i = 0; i < instance.n_nodes; i++) {
 		model.add(v->vs[i] * (int)instance.n_nodes >= e_v_bounds[i]);
 		model.add(v->vs[i] <= e_v_bounds[i]);
-		model.add(e_in_degree[i] <= 1);
+		if (i == 0){
+			//do not add a constraint for in-degree of artificial root node (that's handled elsewhere)
+			//model.add(e_in_degree[i] == 0);
+		} else if (i > 0) {
+			model.add(e_in_degree[i] == v->vs[i]);
+		}
 		e_v_bounds[i].end();
 		e_in_degree[i].end();
 	}
@@ -362,7 +372,7 @@ Variables *kMST_ILP::modelMTZ()
 	model.add(k == e_num_nodes);
 	e_num_nodes.end();
 
-	/* $\sum_{i, j} c_{ij} x_{ij}$ is our minimization function. */
+	/* $min \sum_{i, j} c_{ij} x_{ij}$ is our objective function. */
 	IloExpr e_objective(env);
 	for (u_int k = 0; k < n_edges; k++) {
 		e_objective += v->xs[k] * edges[k].weight;
