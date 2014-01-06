@@ -162,7 +162,7 @@ Variables *kMST_ILP::modelSCF()
 	e_avoid_v0.end();
 
 	/* $\forall i: (k - 1)v_i \geq \sum_j (x_{ij})$. Inactive nodes have no outgoing active edges,
-	 * active ones at most k - 1.
+	 * active ones at most k - 1. TODO: A tighter bound is to take the sum of incoming goods - 1.
 	 * $\forall i:  v_i \leq \sum_j (x_{ij} + x{ji})$. Active nodes have at least one active edge.
 	 * $\sum_{i > 0} v_i = k$. Ensure that exactly k nodes are active.
 	 * $\forall j>0: \sum_i x_{ij} = v_j$. Exactly one incoming edge for an
@@ -204,6 +204,7 @@ Variables *kMST_ILP::modelSCF()
 	e_num_nodes.end();
 
 	/* $\forall i, j \neq 0: f_{ij} \leq kx_{ij}$. Only active edges transport goods.
+	 * TODO: bound sum of incoming goods per node.
 	 * $\forall i, j s.t. i or j is 0: f_{ij} = kx_{ij}$. Only a single edge
 	 * incident on the artificial root transports goods. */
 
