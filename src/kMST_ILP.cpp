@@ -161,38 +161,38 @@ Variables *kMST_ILP::modelSCF()
 	e_single_root.end();
 	e_avoid_v0.end();
 
-	/* $\forall i: nv_i \geq \sum_j (x_{ij} + x{ji})$
-	 * $\forall i:  v_i \leq \sum_j (x_{ij} + x{ji})$
+	/* $\forall i: nv_i \geq \sum_j (x_{ij})$. Inactive nodes have no outgoing active edges.
+	 * $\forall i:  v_i \leq \sum_j (x_{ij} + x{ji})$. Active nodes have at least one active edge.
 	 * $\sum_{i > 0} v_i = k$. Ensure that exactly k nodes are active.
 	 * $\forall j>0: \sum_i x_{ij} = v_j$. Exactly one incoming edge for an
 	 *  active node and none for an inactive node (omitting artificial root). */
 
-	IloExprArray e_v_bounds(env, instance.n_nodes);
 	IloExprArray e_in_degree(env, instance.n_nodes);
+	IloExprArray e_out_degree(env, instance.n_nodes);
 	for (u_int i = 0; i < instance.n_nodes; i++) {
-		e_v_bounds[i] = IloExpr(env);
 		e_in_degree[i] = IloExpr(env);
+		e_out_degree[i] = IloExpr(env);
 	}
 
 	for (u_int k = 0; k < n_edges; k++) {
 		const u_int i = edges[k].v1;
 		const u_int j = edges[k].v2;
 
-		e_v_bounds[i] += v->xs[k];
-		e_v_bounds[j] += v->xs[k];
-
+		e_out_degree[i] += v->xs[k];
 		e_in_degree[j] += v->xs[k];
 	}
 
 	for (u_int i = 0; i < instance.n_nodes; i++) {
-		model.add(v->vs[i] * (int)instance.n_nodes >= e_v_bounds[i]);
-		model.add(v->vs[i] <= e_v_bounds[i]);
-		if (i > 0){
-			//don't add in-degree constraint for artificial root node
+		model.add(v->vs[i] * (int)instance.n_nodes >= e_out_degree[i]);
+		model.add(v->vs[i] <= e_out_degree[i] + e_in_degree[i]); 
+		if (i == 0){
+			//do not add a constraint for in-degree of artificial root node (that's handled elsewhere)
+			//model.add(e_in_degree[i] == 0);
+		} else if (i > 0) {
 			model.add(e_in_degree[i] == v->vs[i]);
 		}
-		e_v_bounds[i].end();
 		e_in_degree[i].end();
+		e_out_degree[i].end();
 	}
 
 	IloExpr e_num_nodes(env);
@@ -329,40 +329,38 @@ Variables *kMST_ILP::modelMTZ()
 		e4.end();
 	}
 
-	/* $\forall i: nv_i \geq \sum_j (x_{ij} + x{ji})$. Inactive nodes have no active edges.
+	/* $\forall i: nv_i \geq \sum_j (x_{ij})$. Inactive nodes have no outgoing active edges.
 	 * $\forall i:  v_i \leq \sum_j (x_{ij} + x{ji})$. Active nodes have at least one active edge.
 	 * $\sum_{i > 0} v_i = k$. Ensure that exactly k nodes are active.
 	 * $\forall j>0: \sum_i x_{ij} = v_j$. Exactly one incoming edge for an
 	 *  active node and none for an inactive node (omitting artificial root). */
 
-	IloExprArray e_v_bounds(env, instance.n_nodes);
 	IloExprArray e_in_degree(env, instance.n_nodes);
+	IloExprArray e_out_degree(env, instance.n_nodes);
 	for (u_int i = 0; i < instance.n_nodes; i++) {
-		e_v_bounds[i] = IloExpr(env);
 		e_in_degree[i] = IloExpr(env);
+		e_out_degree[i] = IloExpr(env);
 	}
 
 	for (u_int k = 0; k < n_edges; k++) {
 		const u_int i = edges[k].v1;
 		const u_int j = edges[k].v2;
 
-		e_v_bounds[i] += v->xs[k];
-		e_v_bounds[j] += v->xs[k];
-
+		e_out_degree[i] += v->xs[k];
 		e_in_degree[j] += v->xs[k];
 	}
 
 	for (u_int i = 0; i < instance.n_nodes; i++) {
-		model.add(v->vs[i] * (int)instance.n_nodes >= e_v_bounds[i]);
-		model.add(v->vs[i] <= e_v_bounds[i]);
+		model.add(v->vs[i] * (int)instance.n_nodes >= e_out_degree[i]);
+		model.add(v->vs[i] <= e_out_degree[i] + e_in_degree[i]); 
 		if (i == 0){
 			//do not add a constraint for in-degree of artificial root node (that's handled elsewhere)
 			//model.add(e_in_degree[i] == 0);
 		} else if (i > 0) {
 			model.add(e_in_degree[i] == v->vs[i]);
 		}
-		e_v_bounds[i].end();
 		e_in_degree[i].end();
+		e_out_degree[i].end();
 	}
 
 	IloExpr e_num_nodes(env);
