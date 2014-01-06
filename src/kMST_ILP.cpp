@@ -329,6 +329,11 @@ Variables *kMST_ILP::modelMTZ()
 		e4.end();
 	}
 
+	/* $\forall i: u_i <= nv_i$ force order of inactive nodes to 0 */
+	for (u_int i = 0; i < instance.n_nodes; i++) {
+		model.add(v->us[i] <= v->vs[i] * (int) instance.n_nodes);
+	}	
+
 	/* $\forall i: nv_i \geq \sum_j (x_{ij})$. Inactive nodes have no outgoing active edges.
 	 * $\forall i:  v_i \leq \sum_j (x_{ij} + x{ji})$. Active nodes have at least one active edge.
 	 * $\sum_{i > 0} v_i = k$. Ensure that exactly k nodes are active.
