@@ -362,6 +362,20 @@ Variables *kMST_ILP::modelMCF()
 	model.add(k == e_num_nodes);
 	e_num_nodes.end();
 
+	/* $\forall l: \sum_j f^l_{0j} \leq 1$. Each commodity l is generated at most
+	 * once by the artificial root node.
+	 * $\sum_{l, j} f^l_{0j} = k$. The artifical root generates k commodities.
+	 * $\forall i, j: f^0_{ij} = 0$. No commodity is generated for the artificial root.
+	 * $\forall l, i, j: f^l_{ij} \leq x_{ij}$. Commodities may only be transmitted
+	 * on active edges.
+	 * $\forall l: \sum_i f^l_{il} = \sum_j f^l_{0j}$. Transmitted commodities end
+	 * up at the target node.
+	 * $\forall l: \sum_j f^l_{lj} = 0$. Once reached, the commodity never leaves the
+	 * target node.
+	 * $\forall j, l s.t. j \neq l: \sum_i f^l_{ij} = \sum_i f^l_{ji}$. Flow is
+	 * conserved when not at target node.
+	 */
+
 	return v;
 }
 
