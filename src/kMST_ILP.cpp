@@ -386,7 +386,7 @@ Variables *kMST_ILP::modelMTZ()
 	const vector<Instance::Edge> edges = directed_edges(instance.edges);
 	const u_int n_edges = edges.size();
 
-	/* $x_{ij} \in \{0, 1\}$ variables denote whether edge (i, j) is active. */
+	/* $x_{ij} \in \{0, 1\}$ variables denote whether edge (i, j) is active. */ /*in report*/
 	v->xs = IloBoolVarArray(env, n_edges);
 	for (u_int k = 0; k < n_edges; k++) {
 		const u_int i = edges[k].v1;
@@ -395,7 +395,7 @@ Variables *kMST_ILP::modelMTZ()
 	}
 
 	/* $u_i \in [0, k]$ variables are used to impose an order on nodes.
-	 * $v_i \in \{0, 1\}$ variables denote whether node i is active. */
+	 * $v_i \in \{0, 1\}$ variables denote whether node i is active. */ /*in report*/
 	v->us = IloIntVarArray(env, instance.n_nodes);
 	v->vs = IloBoolVarArray(env, instance.n_nodes);
 	for (u_int i = 0; i < instance.n_nodes; i++) {
@@ -403,10 +403,6 @@ Variables *kMST_ILP::modelMTZ()
 		v->vs[i] = IloBoolVar(env, Tools::indicesToString("v", i).c_str());
 	}
 
-	/* $\sum_{i, j > 0} x_{ij} = k - 1$. There are exactly k - 1 edges not
-	 * counting edges from the artificial root node 0. 
-	 * $\sum_j x_{0j} = 1$. Exactly one node is chosen as the tree root. 
-	 * $\sum_i x_{i0} = 0$. No edge leads back to the artificial root node 0. */
 	IloExpr e_num_edges(env);
 	IloExpr e_single_root(env);
 	IloExpr e_avoid_v0(env);
@@ -422,42 +418,43 @@ Variables *kMST_ILP::modelMTZ()
 			e_num_edges += v->xs[k];
 		}
 	}
+
+	/* $\sum_{i, j > 0} x_{ij} = k - 1$. There are exactly k - 1 edges not counting edges from the artificial root node 0.*/ /* in report */
 	model.add(e_num_edges == k - 1);
+	/* $\sum_j x_{0j} = 1$. Exactly one node is chosen as the tree root. */ /*in report*/
 	model.add(e_single_root == 1);
+	/* $\sum_i x_{i0} = 0$. No edge leads back to the artificial root node 0. */ /*in report*/
 	model.add(e_avoid_v0 == 0);
 	e_num_edges.end();
 	e_single_root.end();
 	e_avoid_v0.end();
 
-	/* $u_0 = 0$. Set level of artificial root 0 to 0. */
+	
 	IloExpr e3(env);
 	e3 += v->us[0];
+	/* $u_0 = 0$. Set level of artificial root 0 to 0. */ /*in report*/
 	model.add(e3 == 0);
 	e3.end();
 
-	/* $\forall i, j: u_i + x_{ij} \leq u_j + (1 - x_{ij})k$.
-	 * Enforce order hierarchy on nodes. */
 	for (u_int k = 0; k < n_edges; k++) {
 		const u_int i = edges[k].v1;
 		const u_int j = edges[k].v2;
 
 		IloExpr e4(env);
 		e4 = v->us[i] + v->xs[k] - v->us[j] - (-v->xs[k] + 1) * this->k;
+		/* $\forall i, j: u_i + x_{ij} \leq u_j + (1 - x_{ij})k$. 
+		 * Enforce order hierarchy on nodes. */ /*in report*/
 		model.add(e4 <= 0);
 		e4.end();
 	}
 
-	/* $\forall i: u_i <= nv_i$ force order of inactive nodes to 0 */
 	for (u_int i = 0; i < instance.n_nodes; i++) {
+		/* $\forall i: u_i <= nv_i$ force order of inactive nodes to 0 */ /*in report*/
+		/* helps with big instances 6,7,8 */
 		model.add(v->us[i] <= v->vs[i] * (int) instance.n_nodes);
-	}	
+	}
+    
 
-	/* $\forall i: (k - 1)v_i \geq \sum_j (x_{ij})$. Inactive nodes have no outgoing active edges,
-	 * active ones at most k - 1.
-	 * $\forall i:  v_i \leq \sum_j (x_{ij} + x{ji})$. Active nodes have at least one active edge.
-	 * $\sum_{i > 0} v_i = k$. Ensure that exactly k nodes are active.
-	 * $\forall j>0: \sum_i x_{ij} = v_j$. Exactly one incoming edge for an
-	 *  active node and none for an inactive node (omitting artificial root). */
 
 	IloExprArray e_in_degree(env, instance.n_nodes);
 	IloExprArray e_out_degree(env, instance.n_nodes);
@@ -475,14 +472,14 @@ Variables *kMST_ILP::modelMTZ()
 	}
 
 	for (u_int i = 0; i < instance.n_nodes; i++) {
-		//model.add(v->vs[i] * k - v->us[i] >= e_out_degree[i] ); //strange: performs better with small k, worse with higher k
-		model.add(v->vs[i] * (k - 1) >= e_out_degree[i] ); //more stable than the above
-		model.add(v->vs[i] <= e_out_degree[i] + e_in_degree[i]); 
-		if (i == 0){
-			//do not add a constraint for in-degree of artificial root node (that's handled elsewhere)
-			//model.add(e_in_degree[i] == 0);
-		} else if (i > 0) {
-			model.add(e_in_degree[i] == v->vs[i]);
+		
+		/* $\forall i: (k - 1)v_i \geq \sum_j (x_{ij})$. Inactive nodes have no outgoing active edges,
+		 * active ones at most k - 1. */ /*in report*/	
+		model.add(v->vs[i] * (k - 1) >= e_out_degree[i] );
+		if (i > 0) {
+  		    /* $\forall j>0: \sum_i x_{ij} = v_j$. Exactly one incoming edge for an
+			 *  active node and none for an inactive node (omitting artificial root). */ /*in report*/
+			model.add(e_in_degree[i] == v->vs[i]);  //active nodes have exactly 1 incoming arc
 		}
 		e_in_degree[i].end();
 		e_out_degree[i].end();
@@ -492,10 +489,11 @@ Variables *kMST_ILP::modelMTZ()
 	for (u_int i = 1; i < instance.n_nodes; i++) {
 		e_num_nodes += v->vs[i];
 	}
-	model.add(k == e_num_nodes);
+    /* $\sum_{i > 0} v_i = k$. Ensure that exactly k nodes are active.*/ /*in report */
+	model.add(k == e_num_nodes); //redundant together with sum_{ij} x_{ij} = k - 1, but keeping both performs better
 	e_num_nodes.end();
 
-	/* $min \sum_{i, j} c_{ij} x_{ij}$ is our objective function. */
+	/* $min \sum_{i, j} c_{ij} x_{ij}$ is our objective function. */ /*in report*/
 	IloExpr e_objective(env);
 	for (u_int k = 0; k < n_edges; k++) {
 		e_objective += v->xs[k] * edges[k].weight;

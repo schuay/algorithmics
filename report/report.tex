@@ -1,0 +1,116 @@
+\documentclass{article}
+\usepackage{mathtools}
+\usepackage{graphicx} % Required for the inclusion of images
+
+\title{Algorithmics VU Programming Assignment Report} % Title
+\author{Jakob \textsc{Gruber}, Florian \textsc{Kleedorfer}} % Author name
+\date{\today} % Date for the report
+
+\DeclarePairedDelimiter{\ceil}{\lceil}{\rceil}
+
+\begin{document}
+
+\maketitle % Insert the title, author and date
+
+\begin{center}
+\begin{tabular}{l r}
+\end{tabular}
+\end{center}
+
+\section{Problem Statement}
+
+Let $G=(V,A,w)$ be a directed graph and $w: A \rightarrow R_0^+$ a non-negative weighting function, and $k \leq |V|, k \in N^+$. The goal is to find a minimum weight tree spanning exactly k nodes.
+
+The problem must be solved by (mixed) integer linear programs in three variants:
+\begin{enumerate}
+	\item Using Miller-Zucker-Temlin subtour elimination constraints
+	\item Using single commodity flows
+	\item Using multi commodity flows
+\end{enumerate}
+Problem instances are provided. For each instance, results have to be stated for $\ceil[\big]{\frac{1}{5}|V|}$ and  $\ceil[\big]{\frac{1}{2}|V|}$. The results must comprise 
+\begin{enumerate}
+\item Objective function value
+\item Number of branch and bound nodes
+\item Running time
+\end{enumerate}
+
+\section{MLP formulation} 
+\subsection{General}
+This section contains the generic portion of the MLP formulation that is common to all three formulations.
+
+Common to all variants, the problem solution involves an artificial root node that is added to the graph. It has index 0 and has outgoing arcs connecting it to each other node of the graph. Nevertheless, we denote the set of all nodes, including the artificial root node, as V, and the set of all arcs, including those of the artificial root node, as A. The constant $n$ is the size of the original graph: $n = |V| - 1$
+
+\subsubsection{Variables}
+\begin{eqnarray}
+\forall(i,j)\in A: x_{ij} \in \{0,1\}  && \text{arc $(i,j)$ is selected} \\
+\forall i \in \{0,\ldots,n\}: v_i \in \{0, 1\} && \text{node $i$ is selected} 
+\end{eqnarray}
+\subsubsection{Constraints}
+Exactly k nodes must be selected, not counting the artificial node 0.
+\begin{equation}
+\sum_{i\in\{1,\ldots,|V|\}} v_i = k
+\end{equation}
+Exactly $k-1$ edges must be selected, not counting the edges involving the artificial root node 0:
+\begin{equation}
+\sum_{i>0, j>0, (i,j)\in A} x_{ij} = k - 1 
+\end{equation}
+Exactly one arc from the artificial root node to one of the other nodes is chosen. This means that exactly one node is chosen as root of the minimum spanning tree:
+\begin{equation}
+\sum_{j=1}^{n} x_{0j} = 1
+\end{equation}
+No arc may lead back to the artificial root node:
+\begin{equation}
+\sum_{j=1}^{n} x_{j0} = 0
+\end{equation}
+Deselected nodes have no selected outgoing arcs. Selected nodes have at most k - 1 selected outgoing arcs:
+\begin{equation}
+\forall i \in \{1,\ldots,n\}: (k-1)v_i \geq \sum_{j:(i,j)\in A} x_{ij}
+\end{equation}
+Exactly one incoming selected edge for a selected node and none for a deselected node (omitting artificial root)
+\begin{equation}
+\forall j\in\{1,\ldots,n\}: \sum_{i\in\{1,\ldots,n\}} x_{ij} = v_j
+\end{equation}
+
+\subsubsection{Objective Function}
+\begin{equation}
+\textbf{min} \sum_{(i, j) \in A, i>0, j>0} x_{ij},w(i,j) 
+\end{equation}
+
+\subsection{MTZ Subtour Eliminiation Constraints}
+\subsubsection{Variables}
+\begin{eqnarray}
+u_i \in [0,r]  && \text{level of node $i$} \\
+\end{eqnarray}
+\subsubsection{Constraints}
+The artificial root node has level 0:
+\begin{equation}
+u_0 = 0
+\end{equation}
+Enforce level hierarchy on nodes in the tree:
+\begin{equation}
+\forall i, j \in\{0,\ldots,n\}: u_i + x_{ij} \leq u_j + (1 - x_{ij})k
+\end{equation}
+Force level of deselected nodes to 0:
+\begin{equation}
+\forall i \in \{0,\ldots,n\}: u_i <= nv_i
+\end{equation}
+
+\subsection{Single Commodity Flow}
+\subsubsection{Variables}
+\begin{eqnarray}
+\end{eqnarray}
+\subsubsection{Constraints}
+\subsubsection{Objective Function}
+
+\subsection{Multi Commodity Flow}
+\subsubsection{Variables}
+\begin{eqnarray}
+\end{eqnarray}
+\subsubsection{Constraints}
+\subsubsection{Objective Function}
+
+\section{Results and Discussion}
+TODO: Table
+TODO: Discussion
+
+\end{document}
