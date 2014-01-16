@@ -43,6 +43,7 @@ if __name__ == "__main__":
 
     pattern = re.compile("Objective value:\s*(\d+)")
     duration_pattern = re.compile("CPU time:\s*(\d+(?:\.\d+)?)")
+    branch_and_bound_nodes_pattern = re.compile("Branch-and-Bound nodes: (\d+)")
 
     total = 0
     failed = 0
@@ -60,12 +61,13 @@ if __name__ == "__main__":
                 continue
 
             duration = float(duration_pattern.search(output).group(1))
+            bbnodes = int(branch_and_bound_nodes_pattern.search(output).group(1))
             actual = int(match.group(1))
             if actual != inst[2]:
-                print "'%s' failed. Expected %d, got %d" % (command, inst[2], actual)
+                print "'%s' failed. Expected %d, got %d in %.2f s. (%d B&B-nodes)" % (command, inst[2], actual, duration, bbnodes)
                 failed += 1
             else:
-                print "'%s' OK in %.2f s." % (command, duration)
+                print "'%s' OK in %.2f s. (%d B&B-nodes)" % (command, duration, bbnodes)
 
     print "%d total, %d failed" % (total, failed)
 
