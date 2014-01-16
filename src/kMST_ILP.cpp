@@ -181,9 +181,14 @@ Variables *kMST_ILP::modelSCF()
 
 	IloExprArray e_in_degree(env, instance.n_nodes);
 	IloExprArray e_out_degree(env, instance.n_nodes);
+	IloExprArray e_in_flow(env, instance.n_nodes);
+	IloExprArray e_out_flow(env, instance.n_nodes);
+
 	for (u_int i = 0; i < instance.n_nodes; i++) {
 		e_in_degree[i] = IloExpr(env);
 		e_out_degree[i] = IloExpr(env);
+		e_in_flow[i] = IloExpr(env);
+		e_out_flow[i] = IloExpr(env);
 	}
 
 	for (u_int k = 0; k < n_edges; k++) {
@@ -192,6 +197,9 @@ Variables *kMST_ILP::modelSCF()
 
 		e_out_degree[i] += v->xs[k];
 		e_in_degree[j] += v->xs[k];
+		e_out_flow[i] += v->fs[k];
+		e_in_flow[j] += v->fs[k];
+
 	}
 
 	for (u_int i = 0; i < instance.n_nodes; i++) {
@@ -200,11 +208,20 @@ Variables *kMST_ILP::modelSCF()
 		if (i == 0){
 			//do not add a constraint for in-degree of artificial root node (that's handled elsewhere)
 			//model.add(e_in_degree[i] == 0);
+			model.add(e_out_flow[0] == this->k);
 		} else if (i > 0) {
 			model.add(e_in_degree[i] == v->vs[i]);
+			//out-flow = inflow -1 for active nodes, same for inactive nodes
+			model.add(v->vs[i] == e_in_flow[i] - e_out_flow[i]); 
+//			model.add(e_in_flow[i] >= e_out_degree[i]); not so bad, bad
+//			model.add(e_out_flow[i] <= v->vs[i] * this->k); baaad!
+//			model.add(e_out_flow[i] >= e_out_degree[i]); baaaad!
 		}
 		e_in_degree[i].end();
 		e_out_degree[i].end();
+		e_in_flow[i].end();
+		e_out_flow[i].end();
+
 	}
 
 	IloExpr e_num_nodes(env);
@@ -222,19 +239,17 @@ Variables *kMST_ILP::modelSCF()
 	for (u_int k = 0; k < n_edges; k++) {
 		const u_int i = edges[k].v1;
 		const u_int j = edges[k].v2;
-
-		IloExpr e_active_goods(env);
-		e_active_goods = v->fs[k] - v->xs[k] * this->k;
 		if (i == 0 || j == 0) {
-			model.add(e_active_goods == 0);
-		} else {
-			model.add(e_active_goods <= 0);
+			model.add(v->fs[k] == this->k * v->xs[k]);
+		} else {  
+			model.add(v->fs[k] >= 0);
+			model.add(v->fs[k] <= (this->k) * v->xs[k]);
 		}
 	}
 
 	/* $\forall j: \sum_i f_{ij} - \sum_k f_{jk} = v_i$.
 	 * Each active node consumes one unit. */
-
+/*
 	for (u_int x = 1; x < instance.n_nodes; x++) {
 		IloExpr e_node_consumption(env);
 		for (const u_int ind : instance.incidentEdges[x]) {
@@ -254,7 +269,7 @@ Variables *kMST_ILP::modelSCF()
 		e_node_consumption -= v->vs[x];
 		model.add(e_node_consumption == 0);
 	}
-
+*/
 	/* $\sum_{i, j} c_{ij} x_{ij}$ is our minimization function. */
 	IloExpr e_objective(env);
 	for (u_int k = 0; k < n_edges; k++) {
