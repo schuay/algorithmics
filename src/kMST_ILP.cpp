@@ -122,6 +122,227 @@ static vector<Instance::Edge> directed_edges(const vector<Instance::Edge> &es)
 	return des;
 }
 
+/* $x_{ij} \in \{0, 1\}$ variables denote whether edge (i, j) is active. */
+static IloBoolVarArray createVarArrayXs(IloEnv env, vector<Instance::Edge> edges, u_int n_edges)
+{
+	IloBoolVarArray xs = IloBoolVarArray(env, n_edges);
+	for (u_int k = 0; k < n_edges; k++) {
+		const u_int i = edges[k].v1;
+		const u_int j = edges[k].v2;
+		xs[k] = IloBoolVar(env, Tools::indicesToString("x", i, j).c_str());
+	}
+	return xs;
+}
+
+/* $f_{ij} \in [0, k - 1]$ variables denote the number of goods on edge (i, j). */
+static IloIntVarArray createVarArrayFs(IloEnv env, vector<Instance::Edge> edges, u_int n_edges)
+{
+	IloIntVarArray fs = IloIntVarArray(env, n_edges);
+	for (u_int k = 0; k < n_edges; k++) {
+		const u_int i = edges[k].v1;
+		const u_int j = edges[k].v2;
+		fs[k] = IloIntVar(env, 0, k - 1, Tools::indicesToString("f", i, j).c_str());
+	}
+	return fs;
+}
+
+
+/* 
+ * $v_i \in \{0, 1\}$ variables denote whether node i is active. 
+ */
+static IloBoolVarArray createVarArrayVs(IloEnv env, u_int n_nodes)
+{
+	IloBoolVarArray vs = IloBoolVarArray(env, n_nodes);
+	for (u_int i = 0; i < n_nodes; i++) {
+		vs[i] = IloBoolVar(env, Tools::indicesToString("v", i).c_str());
+	}
+	return vs;
+}
+
+
+/**
+ * Objective function:
+ * $\sum_{i, j} c_{ij} x_{ij}$ 
+ */ 
+static void addObjectiveFunction(IloEnv env, IloModel model, IloBoolVarArray xs, vector<Instance::Edge> edges, u_int n_edges)
+{
+	IloExpr e_objective(env);
+	for (u_int m = 0; m < n_edges; m++) {
+		e_objective += xs[m] * edges[m].weight;
+	}
+	model.add(IloMinimize(env, e_objective));
+	e_objective.end();
+}
+
+/* 
+ * $\sum_{i > 0} v_i = k$. Ensure that exactly k nodes are active. 
+ */
+static void addConstraint_k_nodes_active(IloEnv env, IloModel model, IloBoolVarArray vs, Instance& instance, u_int k)
+{
+	IloExpr e_num_nodes(env);
+	for (u_int i = 1; i < instance.n_nodes; i++) {
+		e_num_nodes += vs[i];
+	}
+	model.add(k == e_num_nodes);
+	e_num_nodes.end();
+}
+
+/* 
+ * There are exactly k - 1 arcs not counting edges from the artificial root node 0.
+ * $\sum_{i, j > 0} x_{ij} = k - 1$.  
+ */
+static void addConstraint_k_minus_one_active_edges(IloEnv env, IloModel model, IloBoolVarArray xs, vector<Instance::Edge> edges, u_int n_edges, u_int k)
+{
+	IloExpr e_num_edges(env);
+	for (u_int m = 0; m < n_edges; m++) {
+		const u_int i = edges[m].v1;
+		const u_int j = edges[m].v2;
+		if (i > 0 && j > 0) {
+			e_num_edges += xs[m];
+		}
+	}
+	model.add(e_num_edges == k - 1);
+	e_num_edges.end();
+}
+
+/* 
+ * Exactly one node is chosen as the tree root. 
+ * $\sum_j x_{0j} = 1$. 
+ */
+static void addConstraint_one_active_outgoing_arc_for_node_zero(IloEnv env, IloModel model, IloBoolVarArray xs, vector<Instance::Edge> edges, u_int n_edges)
+{
+	IloExpr e_single_root(env);
+	for (u_int m = 0; m < n_edges; m++) {
+		const u_int i = edges[m].v1;
+		if (i == 0) {
+			e_single_root += xs[m];
+		}
+	}
+	model.add(e_single_root == 1);
+	e_single_root.end();
+}
+
+/* 
+ * No arc leads back to the artificial root node 0. 
+ * $\sum_i x_{i0} = 0$. 
+ */
+static void addConstraint_no_active_incoming_arc_for_node_zero(IloEnv env, IloModel model, IloBoolVarArray xs, vector<Instance::Edge> edges, u_int n_edges)
+{
+	IloExpr e_single_root(env);
+	for (u_int m = 0; m < n_edges; m++) {
+		const u_int j = edges[m].v2;
+		if (j == 0) {
+			e_single_root += xs[m];
+		}
+	}
+	model.add(e_single_root == 0);
+	e_single_root.end();
+}
+
+/**
+ * Inactive nodes have no outgoing active arcs, active ones at most k - 1. 
+ * TODO: A tighter bound is to take the sum of incoming goods - 1.
+ * $\forall i: (k - 1)v_i \geq \sum_j (x_{ij})$. 
+ */
+static void addConstraint_bound_on_outgoing_arcs(IloModel model, IloBoolVarArray vs, IloExprArray& e_out_degree, Instance& instance, int k)
+{
+	for (u_int i = 0; i < instance.n_nodes; i++) {
+		model.add(vs[i] * (k - 1) >= e_out_degree[i]);
+	}
+}
+
+/**
+ * Active nodes have at least one active arc.
+ * $\forall i:  v_i \leq \sum_j (x_{ij} + x{ji})$.
+ */
+static void addConstraint_active_node_at_least_one_active_arc(IloModel model, IloBoolVarArray vs, IloExprArray& e_in_degree, IloExprArray& e_out_degree, Instance& instance)
+{
+	for (u_int i = 0; i < instance.n_nodes; i++) {
+		model.add(vs[i] <= e_out_degree[i] + e_in_degree[i]); 
+	}
+}
+
+/**
+ * Exactly one incoming edge for an active node and none for an inactive node (omitting artificial root). 
+ * $\forall j>0: \sum_i x_{ij} = v_j$. 
+ */
+static void addConstraint_in_degree_one_for_active_node_zero_for_inactive(IloModel model, IloBoolVarArray vs, IloExprArray& e_in_degree, Instance& instance)
+{
+	for (u_int i = 1; i < instance.n_nodes; i++) {
+		model.add(e_in_degree[i] == vs[i]);
+	}
+}
+
+
+/**
+ * Create expression for in-degree for each node.
+ */  
+static IloExprArray createExprArray_in_degree(IloEnv env, vector<Instance::Edge> edges, u_int n_edges, IloBoolVarArray xs,  Instance& instance)
+{
+	IloExprArray e_in_degree(env, instance.n_nodes);
+	for (u_int i = 0; i < instance.n_nodes; i++) {
+		e_in_degree[i] = IloExpr(env);
+	}
+	for (u_int m = 0; m < n_edges; m++) {
+		const u_int j = edges[m].v2;
+		e_in_degree[j] += xs[m];
+	}
+	return e_in_degree;
+}
+
+/**
+ * Create expression for out-degree for each node.
+ */  
+static IloExprArray createExprArray_out_degree(IloEnv env, vector<Instance::Edge> edges, u_int n_edges, IloBoolVarArray xs, Instance& instance)
+{
+	IloExprArray e_out_degree(env, instance.n_nodes);
+	for (u_int i = 0; i < instance.n_nodes; i++) {
+		e_out_degree[i] = IloExpr(env);
+	}
+	for (u_int m = 0; m < n_edges; m++) {
+		const u_int i = edges[m].v1;
+		e_out_degree[i] += xs[m];
+	}
+	return e_out_degree;
+}
+
+
+/********************************** SCF specific methods ********************************/
+
+/**
+ * Create expression for out-flow for each node.
+ */  
+static IloExprArray createExprArray_in_flow(IloEnv env, vector<Instance::Edge> edges, u_int n_edges, IloIntVarArray fs,  Instance& instance)
+{
+	IloExprArray expr(env, instance.n_nodes);
+	for (u_int i = 0; i < instance.n_nodes; i++) {
+		expr[i] = IloExpr(env);
+	}
+	for (u_int m = 0; m < n_edges; m++) {
+		const u_int j = edges[m].v2;
+		expr[j] += fs[m];
+	}
+	return expr;
+}
+
+/**
+ * Create expression for in-flow for each node.
+ */
+static IloExprArray createExprArray_out_flow(IloEnv env, vector<Instance::Edge> edges, u_int n_edges, IloIntVarArray fs, Instance& instance)
+{
+	IloExprArray expr(env, instance.n_nodes);
+	for (u_int i = 0; i < instance.n_nodes; i++) {
+		expr[i] = IloExpr(env);
+	}
+	for (u_int m = 0; m < n_edges; m++) {
+		const u_int i = edges[m].v1;
+		expr[i] += fs[m];
+	}
+	return expr;
+}
+
+
+
 Variables *kMST_ILP::modelSCF()
 {
 	SCFVariables *v = new SCFVariables();
@@ -129,90 +350,57 @@ Variables *kMST_ILP::modelSCF()
 	const vector<Instance::Edge> edges = directed_edges(instance.edges);
 	const u_int n_edges = edges.size();
 
-	/* $x_{ij} \in \{0, 1\}$ variables denote whether edge (i, j) is active.
-	 * $f_{ij} \in [0, k - 1]$ variables denote the number of goods on edge (i, j). */
-	v->xs = IloBoolVarArray(env, n_edges);
-	v->fs = IloIntVarArray(env, n_edges);
-	for (u_int k = 0; k < n_edges; k++) {
-		const u_int i = edges[k].v1;
-		const u_int j = edges[k].v2;
-		v->xs[k] = IloBoolVar(env, Tools::indicesToString("x", i, j).c_str());
-		v->fs[k] = IloIntVar(env, 0, k - 1, Tools::indicesToString("f", i, j).c_str());
-	}
+	/* $x_{ij} \in \{0, 1\}$ variables denote whether edge (i, j) is active. */
+	v->xs = createVarArrayXs(env, edges, n_edges);
 
 	/* $v_i \in \{0, 1\}$ variables denote whether node i is active. */
-	v->vs = IloBoolVarArray(env, instance.n_nodes);
-	for (u_int i = 0; i < instance.n_nodes; i++) {
-		v->vs[i] = IloBoolVar(env, Tools::indicesToString("v", i).c_str());
-	}
+	v->vs = createVarArrayVs(env, instance.n_nodes);
 
-	/* $\sum_{i, j > 0} x_{ij} = k - 1$. There are exactly k - 1 edges not
-	 * counting edges from the artificial root node 0. 
-	 * $\sum_j x_{0j} = 1$. Exactly one node is chosen as the tree root. 
-	 * $\sum_i x_{i0} = 0$. No edge leads back to the artificial root node 0. */
-	IloExpr e_num_edges(env);
-	IloExpr e_single_root(env);
-	IloExpr e_avoid_v0(env);
-	for (u_int k = 0; k < n_edges; k++) {
-		const u_int i = edges[k].v1;
-		const u_int j = edges[k].v2;
+	/* add objective function */
+	addObjectiveFunction(env, model, v->xs, edges, n_edges);
 
-		if (i == 0) {
-			e_single_root += v->xs[k];
-		} else if (j == 0) {
-			e_avoid_v0 += v->xs[k];
-		} else {
-			e_num_edges += v->xs[k];
-		}
-	}
-	model.add(e_num_edges == k - 1);
-	model.add(e_single_root == 1);
-	model.add(e_avoid_v0 == 0);
-	e_num_edges.end();
-	e_single_root.end();
-	e_avoid_v0.end();
+	/* There are exactly k - 1 edges not counting edges from the artificial root node 0. */
+	addConstraint_k_minus_one_active_edges(env,model,v->xs,edges,n_edges,this->k);
 
-	/* $\forall i: (k - 1)v_i \geq \sum_j (x_{ij})$. Inactive nodes have no outgoing active edges,
-	 * active ones at most k - 1. TODO: A tighter bound is to take the sum of incoming goods - 1.
-	 * $\forall i:  v_i \leq \sum_j (x_{ij} + x{ji})$. Active nodes have at least one active edge.
-	 * $\sum_{i > 0} v_i = k$. Ensure that exactly k nodes are active.
-	 * $\forall j>0: \sum_i x_{ij} = v_j$. Exactly one incoming edge for an
-	 *  active node and none for an inactive node (omitting artificial root). */
+    /* Exactly one node is chosen as the tree root. */
+	addConstraint_one_active_outgoing_arc_for_node_zero(env,model,v->xs,edges,n_edges);
+ 
+    /* No edge leads back to the artificial root node 0. */
+	addConstraint_no_active_incoming_arc_for_node_zero(env,model,v->xs,edges,n_edges);
 
-	IloExprArray e_in_degree(env, instance.n_nodes);
-	IloExprArray e_out_degree(env, instance.n_nodes);
-	IloExprArray e_in_flow(env, instance.n_nodes);
-	IloExprArray e_out_flow(env, instance.n_nodes);
+	IloExprArray e_in_degree = createExprArray_in_degree(env, edges, n_edges, v->xs, instance);
+	IloExprArray e_out_degree = createExprArray_out_degree(env, edges, n_edges, v->xs, instance);
+
+	/* Inactive nodes have no outgoing active edges, active ones at most k - 1. TODO: A tighter bound is to take the sum of incoming goods - 1.*/
+	addConstraint_bound_on_outgoing_arcs(model,v->vs,e_out_degree,instance,this->k);
+
+	/* Active nodes have at least one active arc.*/
+	addConstraint_active_node_at_least_one_active_arc(model,v->vs,e_in_degree, e_out_degree,instance);
+	
+	/* Exactly one incoming edge for an active node and none for an inactive node (omitting artificial root). */
+ 	addConstraint_in_degree_one_for_active_node_zero_for_inactive(model,v->vs,e_in_degree,instance);
+	
+	//note: position matters. Tried worse positions than this one 
+	/* $\sum_{i > 0} v_i = k$. Ensure that exactly k nodes are active. */
+	addConstraint_k_nodes_active(env, model, v->vs, instance, this->k);
+	e_in_degree.endElements();
+	e_out_degree.endElements();
+
+
+
+	/* $f_{ij} \in [0, k - 1]$ variables denote the number of goods on edge (i, j). */
+	v->fs = createVarArrayFs(env, edges, n_edges);
+
+	IloExprArray e_in_flow = createExprArray_in_flow(env, edges, n_edges, v->fs, instance);
+	IloExprArray e_out_flow = createExprArray_out_flow(env, edges, n_edges, v->fs, instance);
 
 	for (u_int i = 0; i < instance.n_nodes; i++) {
-		e_in_degree[i] = IloExpr(env);
-		e_out_degree[i] = IloExpr(env);
-		e_in_flow[i] = IloExpr(env);
-		e_out_flow[i] = IloExpr(env);
-	}
-
-	for (u_int k = 0; k < n_edges; k++) {
-		const u_int i = edges[k].v1;
-		const u_int j = edges[k].v2;
-
-		e_out_degree[i] += v->xs[k];
-		e_in_degree[j] += v->xs[k];
-		e_out_flow[i] += v->fs[k];
-		e_in_flow[j] += v->fs[k];
-
-	}
-
-	for (u_int i = 0; i < instance.n_nodes; i++) {
-		model.add(v->vs[i] * (this->k - 1) >= e_out_degree[i]);
-		model.add(v->vs[i] <= e_out_degree[i] + e_in_degree[i]); 
 		model.add(v->vs[i] <= e_out_flow[i] + e_in_flow[i]);
-
 		if (i == 0){
 			//do not add a constraint for in-degree of artificial root node (that's handled elsewhere)
 			//model.add(e_in_degree[i] == 0);
 			model.add(e_out_flow[0] == this->k);
 		} else if (i > 0) {
-			model.add(e_in_degree[i] == v->vs[i]);
 			//out-flow = inflow -1 for active nodes, same for inactive nodes
 			model.add(v->vs[i] == e_in_flow[i] - e_out_flow[i]); 
 //			model.add(e_in_flow[i] >= e_out_degree[i]); //not so bad, bad
@@ -220,19 +408,10 @@ Variables *kMST_ILP::modelSCF()
 //			model.add(e_out_flow[i] >= e_out_degree[i]); //baaaad!
 //		model.add(v->vs[i] * (this->k - 1) >= e_out_flow[i]); //so very very baaaad
 		}
-		e_in_degree[i].end();
-		e_out_degree[i].end();
-		e_in_flow[i].end();
-		e_out_flow[i].end();
-
 	}
+	e_in_flow.endElements();
+	e_out_flow.endElements();
 
-	IloExpr e_num_nodes(env);
-	for (u_int i = 1; i < instance.n_nodes; i++) {
-		e_num_nodes += v->vs[i];
-	}
-	model.add(k == e_num_nodes);
-	e_num_nodes.end();
 
 	/* $\forall i, j \neq 0: f_{ij} \leq kx_{ij}$. Only active edges transport goods.
 	 * TODO: bound sum of incoming goods per node.
@@ -250,37 +429,6 @@ Variables *kMST_ILP::modelSCF()
 		}
 	}
 
-	/* $\forall j: \sum_i f_{ij} - \sum_k f_{jk} = v_i$.
-	 * Each active node consumes one unit. */
-/*
-	for (u_int x = 1; x < instance.n_nodes; x++) {
-		IloExpr e_node_consumption(env);
-		for (const u_int ind : instance.incidentEdges[x]) {
-			const u_int i = edges[ind].v1;
-			const u_int j = edges[ind].v2;
-
-			if (i == x) {
-				e_node_consumption += v->fs[ind + instance.n_edges];
-				e_node_consumption -= v->fs[ind];
-			} else if (j == x) {
-				e_node_consumption += v->fs[ind];
-				e_node_consumption -= v->fs[ind + instance.n_edges];
-			} else {
-				assert(false);
-			}
-		}
-		e_node_consumption -= v->vs[x];
-		model.add(e_node_consumption == 0);
-	}
-*/
-	/* $\sum_{i, j} c_{ij} x_{ij}$ is our minimization function. */
-	IloExpr e_objective(env);
-	for (u_int k = 0; k < n_edges; k++) {
-		e_objective += v->xs[k] * edges[k].weight;
-	}
-	model.add(IloMinimize(env, e_objective));
-	e_objective.end();
-
 	return v;
 }
 
@@ -288,111 +436,236 @@ Variables *kMST_ILP::modelMCF()
 {
 	MCFVariables *v = new MCFVariables();
 
+	/***** generic part ***/
+
 	const vector<Instance::Edge> edges = directed_edges(instance.edges);
 	const u_int n_edges = edges.size();
 
-	/* $x_{ij} \in \{0, 1\}$ variables denote whether edge (i, j) is active.
-	 * $f^k_{ij} \in \{0, 1\}$ variables denote the flow on edge (i, j) for commodity k. */
-	v->xs = IloBoolVarArray(env, n_edges);
-	for (u_int i = 0; i < instance.n_nodes; i++) {
+	/* $x_{ij} \in \{0, 1\}$ variables denote whether edge (i, j) is active. */
+	v->xs = createVarArrayXs(env, edges, n_edges);
+
+	/* $v_i \in \{0, 1\}$ variables denote whether node i is active. */
+	v->vs = createVarArrayVs(env, instance.n_nodes);
+
+	/* add objective function */
+	addObjectiveFunction(env, model, v->xs, edges, n_edges);
+
+	/* There are exactly k - 1 edges not counting edges from the artificial root node 0. */
+	addConstraint_k_minus_one_active_edges(env,model,v->xs,edges,n_edges,this->k);
+
+    /* Exactly one node is chosen as the tree root. */
+	addConstraint_one_active_outgoing_arc_for_node_zero(env,model,v->xs,edges,n_edges);
+ 
+    /* No edge leads back to the artificial root node 0. */
+	addConstraint_no_active_incoming_arc_for_node_zero(env,model,v->xs,edges,n_edges);
+
+	IloExprArray e_in_degree = createExprArray_in_degree(env, edges, n_edges, v->xs, instance);
+	IloExprArray e_out_degree = createExprArray_out_degree(env, edges, n_edges, v->xs, instance);
+
+	/* Inactive nodes have no outgoing active edges, active ones at most k - 1. TODO: A tighter bound is to take the sum of incoming goods - 1.*/
+	addConstraint_bound_on_outgoing_arcs(model,v->vs,e_out_degree,instance,this->k);
+
+	/* Active nodes have at least one active arc.*/
+	addConstraint_active_node_at_least_one_active_arc(model,v->vs,e_in_degree, e_out_degree,instance);
+	
+	/* Exactly one incoming edge for an active node and none for an inactive node (omitting artificial root). */
+ 	addConstraint_in_degree_one_for_active_node_zero_for_inactive(model,v->vs,e_in_degree,instance);
+	
+	//note: position matters. Tried worse positions than this one 
+	/* $\sum_{i > 0} v_i = k$. Ensure that exactly k nodes are active. */
+	addConstraint_k_nodes_active(env, model, v->vs, instance, this->k);
+	e_in_degree.endElements();
+	e_out_degree.endElements();
+
+
+    /***** MCF specific part ***/
+
+	/* $f^k_{ij} \in \{0, 1\}$ variables denote the flow on edge (i, j) for commodity k. */
+	for (u_int i = 0; i < (u_int) this->k; i++) {
 		v->fss.push_back(IloBoolVarArray(env, n_edges));
 	}
 	for (u_int k = 0; k < n_edges; k++) {
 		const u_int i = edges[k].v1;
 		const u_int j = edges[k].v2;
-		v->xs[k] = IloBoolVar(env, Tools::indicesToString("x", i, j).c_str());
-		for (u_int l = 0; l < instance.n_nodes; l++) {
+		for (u_int l = 0; l < (u_int) this->k; l++) {
 			v->fss[l][k] = IloBoolVar(env, Tools::indicesToString("f", l, i, j).c_str());
+			model.add(v->fss[l][k] >= 0);
 		}
 	}
-
-	/* $v_i \in \{0, 1\}$ variables denote whether node i is active. */
-	v->vs = IloBoolVarArray(env, instance.n_nodes);
-	for (u_int i = 0; i < instance.n_nodes; i++) {
-		v->vs[i] = IloBoolVar(env, Tools::indicesToString("v", i).c_str());
+	
+	/* 
+     * Each commodity l is generated once by the artificial root node:
+	 * $\forall l: \sum_j f^l_{0j} \leq 1$.                                                
+     */
+	for (u_int c = 0; c < (u_int) this->k; c++){
+		IloExpr e_one_commodity(env);		
+		for (u_int m = 0; m < n_edges; m++) {
+			const u_int i = edges[m].v1;
+			const u_int j = edges[m].v2;
+			if (i == 0 && j > 0){
+				e_one_commodity += v->fss[c][m];	
+			}
+		} 
+		model.add(e_one_commodity == 1);
+		e_one_commodity.end();
 	}
 
-	/* $\sum_{i, j > 0} x_{ij} = k - 1$. There are exactly k - 1 edges not
-	 * counting edges from the artificial root node 0. 
-	 * $\sum_j x_{0j} = 1$. Exactly one node is chosen as the tree root. 
-	 * $\sum_i x_{i0} = 0$. No edge leads back to the artificial root node 0. */
-	IloExpr e_num_edges(env);
-	IloExpr e_single_root(env);
-	IloExpr e_avoid_v0(env);
-	for (u_int k = 0; k < n_edges; k++) {
-		const u_int i = edges[k].v1;
-		const u_int j = edges[k].v2;
-
-		if (i == 0) {
-			e_single_root += v->xs[k];
-		} else if (j == 0) {
-			e_avoid_v0 += v->xs[k];
-		} else {
-			e_num_edges += v->xs[k];
-		}
+	/* 
+     * The artifical root generates k commodities:
+     * $\sum_{l, j} f^l_{0j} = k$. 
+     */
+    IloExpr e_root_generates_k(env);		
+	for (u_int c = 0; c < (u_int) this->k; c++){
+		for (u_int m = 0; m < n_edges; m++) {
+			const u_int i = edges[m].v1;
+			const u_int j = edges[m].v2;
+			if (i == 0 && j > 0){
+				e_root_generates_k += v->fss[c][m];	
+			}
+		} 
 	}
-	model.add(e_num_edges == k - 1);
-	model.add(e_single_root == 1);
-	model.add(e_avoid_v0 == 0);
-	e_num_edges.end();
-	e_single_root.end();
-	e_avoid_v0.end();
+	model.add(e_root_generates_k == this->k);
+	e_root_generates_k.end();
 
-	/* $\forall i: (k - 1)v_i \geq \sum_j (x_{ij})$. Inactive nodes have no outgoing active edges,
-	 * active ones at most k - 1. TODO: A tighter bound is to take the sum of incoming goods - 1.
-	 * $\forall i:  v_i \leq \sum_j (x_{ij} + x{ji})$. Active nodes have at least one active edge.
-	 * $\sum_{i > 0} v_i = k$. Ensure that exactly k nodes are active.
-	 * $\forall j>0: \sum_i x_{ij} = v_j$. Exactly one incoming edge for an
-	 *  active node and none for an inactive node (omitting artificial root). */
 
-	IloExprArray e_in_degree(env, instance.n_nodes);
-	IloExprArray e_out_degree(env, instance.n_nodes);
-	for (u_int i = 0; i < instance.n_nodes; i++) {
-		e_in_degree[i] = IloExpr(env);
-		e_out_degree[i] = IloExpr(env);
+	/*
+     * No commodity is generated for the artificial root:
+     * $\forall i, j: f^0_{ij} = 0$. 
+     */
+    IloExpr e_none_gen_for_root(env);		
+	for (u_int c = 0; c < (u_int) this->k; c++){
+		for (u_int m = 0; m < n_edges; m++) {
+			const u_int i = edges[m].v1;
+			const u_int j = edges[m].v2;
+			if (i == 0 && j == 0){
+				e_none_gen_for_root += v->fss[c][m];	
+			}
+		} 
 	}
+	model.add(e_none_gen_for_root == 0);
+	e_none_gen_for_root.end();
 
-	for (u_int k = 0; k < n_edges; k++) {
-		const u_int i = edges[k].v1;
-		const u_int j = edges[k].v2;
-
-		e_out_degree[i] += v->xs[k];
-		e_in_degree[j] += v->xs[k];
+	/* 
+	 * Transmitted commodities end up at the target node:
+	 * $\forall l: \sum_i f^l_{il} = \sum_j f^l_{0j}$. 
+     */
+/*
+	for (u_int c = 0; c < (u_int) this->k; c++){
+		IloExpr e_commodity_reaches_target(env);		
+		for (u_int m = 0; m < n_edges; m++) {
+			const u_int i = edges[m].v1;
+			const u_int j = edges[m].v2;
+			if (i != c && j == c){
+				e_commodity_reaches_target += v->fss[c][m];	
+			}
+		} 
+		model.add(e_commodity_reaches_target == 1);
+		e_commodity_reaches_target.end();
 	}
+*/
 
-	for (u_int i = 0; i < instance.n_nodes; i++) {
-		model.add(v->vs[i] * (k - 1) >= e_out_degree[i]);
-		model.add(v->vs[i] <= e_out_degree[i] + e_in_degree[i]); 
-		if (i == 0){
-			//do not add a constraint for in-degree of artificial root node (that's handled elsewhere)
-			//model.add(e_in_degree[i] == 0);
-		} else if (i > 0) {
-			model.add(e_in_degree[i] == v->vs[i]);
-		}
-		e_in_degree[i].end();
-		e_out_degree[i].end();
+
+	/* 
+	 * Once reached, the commodity never leaves the target node:
+	 * $\forall l: \sum_j f^l_{lj} = 0$.  
+     */
+/*
+	for (u_int c = 0; c < (u_int) this->k; c++){
+		IloExpr e_commodity_stays_at_target(env);		
+		for (u_int m = 0; m < n_edges; m++) {
+			const u_int i = edges[m].v1;
+			const u_int j = edges[m].v2;
+			if (i == c && j != c &&){
+				e_commodity_stays_at_target += v->fss[c][m];	
+			}
+		} 
+		model.add(e_commodity_stays_at_target == 0);
+		e_commodity_stays_at_target.end();
 	}
+*/
 
-	IloExpr e_num_nodes(env);
-	for (u_int i = 1; i < instance.n_nodes; i++) {
-		e_num_nodes += v->vs[i];
-	}
-	model.add(k == e_num_nodes);
-	e_num_nodes.end();
-
-	/* $\forall l: \sum_j f^l_{0j} \leq 1$. Each commodity l is generated at most
-	 * once by the artificial root node.
-	 * $\sum_{l, j} f^l_{0j} = k$. The artifical root generates k commodities.
-	 * $\forall i, j: f^0_{ij} = 0$. No commodity is generated for the artificial root.
-	 * $\forall l, i, j: f^l_{ij} \leq x_{ij}$. Commodities may only be transmitted
-	 * on active edges.
-	 * $\forall l: \sum_i f^l_{il} = \sum_j f^l_{0j}$. Transmitted commodities end
-	 * up at the target node.
-	 * $\forall l: \sum_j f^l_{lj} = 0$. Once reached, the commodity never leaves the
-	 * target node.
-	 * $\forall j, l s.t. j \neq l: \sum_i f^l_{ij} = \sum_i f^l_{ji}$. Flow is
-	 * conserved when not at target node.
+	/* 
+	 * Flow is conserved when not at target node. 
+	 * $\forall j, l s.t. j \neq l: \sum_i f^l_{ij} = \sum_i f^l_{ji}$. 
 	 */
+
+	/*
+	 * For all nodes: The sum of net flow at node i over all commodities must be == v
+	 */
+	 IloExprArray e_net_flow_sum_per_node(env,instance.n_nodes);
+	 for (u_int m = 0; m < instance.n_nodes; m++){
+			e_net_flow_sum_per_node[m] = IloExpr(env);
+	 }
+	 for (u_int c = 0; c < (u_int) this->k; c++){
+		IloExpr e_net_flow_sum_per_comm = IloExpr(env);
+		IloExprArray e_in_flow_k(env, instance.n_nodes);		
+		IloExprArray e_out_flow_k(env, instance.n_nodes);		
+		IloExprArray e_net_flow_k(env, instance.n_nodes);
+		for (u_int m = 0; m < instance.n_nodes; m++){
+			e_in_flow_k[m] = IloExpr(env);
+			e_out_flow_k[m] = IloExpr(env);
+			e_net_flow_k[m] = IloExpr(env);
+		}
+		for (u_int m = 0; m < n_edges; m++) {
+			const u_int i = edges[m].v1;
+			const u_int j = edges[m].v2;
+			e_out_flow_k[i] += v->fss[c][m];	
+			e_in_flow_k[j] += v->fss[c][m];	
+		} 
+		for (u_int m = 1; m < instance.n_nodes; m++){
+			e_net_flow_k[m] = e_in_flow_k[m] - e_out_flow_k[m];
+			e_net_flow_sum_per_node[m] += e_net_flow_k[m];
+			e_net_flow_sum_per_comm += e_net_flow_k[m];
+		    //if net flow is 1, v[k] must be 1 
+			model.add(e_net_flow_k[m] <= v->vs[m]);
+		}
+		
+		//sum over all net flows must be 1
+
+//		for (u_int m = 0; m < instance.n_nodes; m++){
+//			model.add(e_in_flow_k[m] - e_out_flow_k[m] == );
+//		}
+ 		model.add(e_net_flow_sum_per_comm == 1);
+		e_in_flow_k.endElements();
+		e_out_flow_k.endElements();
+		e_net_flow_k.endElements();
+		e_net_flow_sum_per_comm.end();
+	 }
+	 //now make sure each net flow sum per node == v
+     for (u_int m = 1; m < instance.n_nodes; m++){
+		model.add(e_net_flow_sum_per_node[m] == v->vs[m]);
+ 	 }
+	e_net_flow_sum_per_node.endElements();
+
+	
+
+	/* 
+	 * Commodities may only be transmitted on active edges:
+	 * $\forall l, i, j: f^l_{ij} \leq x_{ij}$. 
+     */
+	for (u_int c = 0; c < (u_int) this->k; c++){
+		for (u_int m = 0; m < n_edges; m++) {
+			const u_int i = edges[m].v1;
+			const u_int j = edges[m].v2;
+			model.add(v->fss[c][m] <= v->xs[m]);
+		} 
+	}
+
+	/* 
+
+	 * $\forall l, i, j: f^l_{ij} \leq x_{ij}$. 
+     */
+	for (u_int c = 0; c < (u_int) this->k; c++){
+		for (u_int m = 0; m < n_edges; m++) {
+			const u_int i = edges[m].v1;
+			const u_int j = edges[m].v2;
+			if (i > 0 && j > 0){
+				model.add(v->fss[c][m] <= v->xs[m]);
+			}   
+		} 
+	}
+
+
 
 	return v;
 }
@@ -401,51 +674,55 @@ Variables *kMST_ILP::modelMTZ()
 {
 	MTZVariables *v = new MTZVariables();
 
+    /***** generic part ***/
+
 	const vector<Instance::Edge> edges = directed_edges(instance.edges);
 	const u_int n_edges = edges.size();
 
-	/* $x_{ij} \in \{0, 1\}$ variables denote whether edge (i, j) is active. */ /*in report*/
-	v->xs = IloBoolVarArray(env, n_edges);
-	for (u_int k = 0; k < n_edges; k++) {
-		const u_int i = edges[k].v1;
-		const u_int j = edges[k].v2;
-		v->xs[k] = IloBoolVar(env, Tools::indicesToString("x", i, j).c_str());
-	}
+	/* $x_{ij} \in \{0, 1\}$ variables denote whether edge (i, j) is active. */
+	v->xs = createVarArrayXs(env, edges, n_edges);
 
-	/* $u_i \in [0, k]$ variables are used to impose an order on nodes.
-	 * $v_i \in \{0, 1\}$ variables denote whether node i is active. */ /*in report*/
+	/* $v_i \in \{0, 1\}$ variables denote whether node i is active. */
+	v->vs = createVarArrayVs(env, instance.n_nodes);
+
+	/* add objective function */
+	addObjectiveFunction(env, model, v->xs, edges, n_edges);
+
+	/* There are exactly k - 1 edges not counting edges from the artificial root node 0. */
+	addConstraint_k_minus_one_active_edges(env,model,v->xs,edges,n_edges,this->k);
+
+    /* Exactly one node is chosen as the tree root. */
+	addConstraint_one_active_outgoing_arc_for_node_zero(env,model,v->xs,edges,n_edges);
+ 
+    /* No edge leads back to the artificial root node 0. */
+	addConstraint_no_active_incoming_arc_for_node_zero(env,model,v->xs,edges,n_edges);
+
+	IloExprArray e_in_degree = createExprArray_in_degree(env, edges, n_edges, v->xs, instance);
+	IloExprArray e_out_degree = createExprArray_out_degree(env, edges, n_edges, v->xs, instance);
+
+	/* Inactive nodes have no outgoing active edges, active ones at most k - 1. TODO: A tighter bound is to take the sum of incoming goods - 1.*/
+	addConstraint_bound_on_outgoing_arcs(model,v->vs,e_out_degree,instance,this->k);
+
+	/* Active nodes have at least one active arc.*/
+	addConstraint_active_node_at_least_one_active_arc(model,v->vs,e_in_degree, e_out_degree,instance);
+	
+	/* Exactly one incoming edge for an active node and none for an inactive node (omitting artificial root). */
+ 	addConstraint_in_degree_one_for_active_node_zero_for_inactive(model,v->vs,e_in_degree,instance);
+	
+	//note: position matters. Tried worse positions than this one 
+	/* $\sum_{i > 0} v_i = k$. Ensure that exactly k nodes are active. */
+	addConstraint_k_nodes_active(env, model, v->vs, instance, this->k);
+	e_in_degree.endElements();
+	e_out_degree.endElements();
+
+
+    /***** MTZ specific part ***/
+
+	/* $u_i \in [0, k]$ variables are used to impose an order on nodes. */ /*in report*/
 	v->us = IloIntVarArray(env, instance.n_nodes);
-	v->vs = IloBoolVarArray(env, instance.n_nodes);
 	for (u_int i = 0; i < instance.n_nodes; i++) {
 		v->us[i] = IloIntVar(env, 0, k, Tools::indicesToString("u", i).c_str());
-		v->vs[i] = IloBoolVar(env, Tools::indicesToString("v", i).c_str());
 	}
-
-	IloExpr e_num_edges(env);
-	IloExpr e_single_root(env);
-	IloExpr e_avoid_v0(env);
-	for (u_int k = 0; k < n_edges; k++) {
-		const u_int i = edges[k].v1;
-		const u_int j = edges[k].v2;
-
-		if (i == 0) {
-			e_single_root += v->xs[k];
-		} else if (j == 0) {
-			e_avoid_v0 += v->xs[k];
-		} else {
-			e_num_edges += v->xs[k];
-		}
-	}
-
-	/* $\sum_{i, j > 0} x_{ij} = k - 1$. There are exactly k - 1 edges not counting edges from the artificial root node 0.*/ /* in report */
-	model.add(e_num_edges == k - 1);
-	/* $\sum_j x_{0j} = 1$. Exactly one node is chosen as the tree root. */ /*in report*/
-	model.add(e_single_root == 1);
-	/* $\sum_i x_{i0} = 0$. No edge leads back to the artificial root node 0. */ /*in report*/
-	model.add(e_avoid_v0 == 0);
-	e_num_edges.end();
-	e_single_root.end();
-	e_avoid_v0.end();
 
 	
 	IloExpr e3(env);
@@ -470,55 +747,7 @@ Variables *kMST_ILP::modelMTZ()
 		/* $\forall i: u_i <= nv_i$ force order of inactive nodes to 0 */ /*in report*/
 		/* helps with big instances 6,7,8 */
 		model.add(v->us[i] <= v->vs[i] * (int) instance.n_nodes);
-	}
-    
-
-
-	IloExprArray e_in_degree(env, instance.n_nodes);
-	IloExprArray e_out_degree(env, instance.n_nodes);
-	for (u_int i = 0; i < instance.n_nodes; i++) {
-		e_in_degree[i] = IloExpr(env);
-		e_out_degree[i] = IloExpr(env);
-	}
-
-	for (u_int k = 0; k < n_edges; k++) {
-		const u_int i = edges[k].v1;
-		const u_int j = edges[k].v2;
-
-		e_out_degree[i] += v->xs[k];
-		e_in_degree[j] += v->xs[k];
-	}
-
-	for (u_int i = 0; i < instance.n_nodes; i++) {
-		
-		/* $\forall i: (k - 1)v_i \geq \sum_j (x_{ij})$. Inactive nodes have no outgoing active edges,
-		 * active ones at most k - 1. */ /*in report*/	
-		model.add(v->vs[i] * (k - 1) >= e_out_degree[i] );
-		if (i > 0) {
-  		    /* $\forall j>0: \sum_i x_{ij} = v_j$. Exactly one incoming edge for an
-			 *  active node and none for an inactive node (omitting artificial root). */ /*in report*/
-			model.add(e_in_degree[i] == v->vs[i]);  //active nodes have exactly 1 incoming arc
-		}
-		e_in_degree[i].end();
-		e_out_degree[i].end();
-	}
-
-	IloExpr e_num_nodes(env);
-	for (u_int i = 1; i < instance.n_nodes; i++) {
-		e_num_nodes += v->vs[i];
-	}
-    /* $\sum_{i > 0} v_i = k$. Ensure that exactly k nodes are active.*/ /*in report */
-	model.add(k == e_num_nodes); //redundant together with sum_{ij} x_{ij} = k - 1, but keeping both performs better
-	e_num_nodes.end();
-
-	/* $min \sum_{i, j} c_{ij} x_{ij}$ is our objective function. */ /*in report*/
-	IloExpr e_objective(env);
-	for (u_int k = 0; k < n_edges; k++) {
-		e_objective += v->xs[k] * edges[k].weight;
-	}
-	model.add(IloMinimize(env, e_objective));
-	e_objective.end();
-
+	}	
 	return v;
 }
 
