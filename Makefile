@@ -87,10 +87,10 @@ gdb: all
 	gdb --args $(EXEC)
 
 clean:
-	rm -rf obj/*.o kmst gmon.out
+	rm -rf obj/*.o kmst gmon.out doc/report.{aux,log,pdf}
 
-doc: all
-	doxygen doc/doxygen.cfg
+doc/report.pdf: doc/report.tex
+	cd doc && pdflatex report.tex && pdflatex report.tex
 
 # ------ include dependency file ---------------------------------------------------
 include depend.in
