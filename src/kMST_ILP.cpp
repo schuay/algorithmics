@@ -490,8 +490,8 @@ Variables *kMST_ILP::modelMCF()
 	}
 	
 	/* 
-     * Each commodity l is generated once by the artificial root node:
-	 * $\forall l>0: \sum_j f^l_{0j} == 1$ if node l is active, 0 otherwise
+     * Each commodity l is generated once by the artificial root node if node l is active, not at all otherwise:
+	 * $\forall l \in \{1, \ldots, n\}: \sum_{j:j>0,(0,j) \in A} f^l_{0j} == v_l$ 
      */
 	for (u_int c = 1; c < instance.n_nodes; c++){
 		IloExpr e_one_commodity(env);		
@@ -508,7 +508,7 @@ Variables *kMST_ILP::modelMCF()
 
 	/* 
      * The artifical root generates k commodities:
-     * $\sum_{l, j} f^l_{0j} = k$. 
+     * $\forall l \in \{0,\ldots,n\}\sum_{j:j>0,(0,j) \in A} f^l_{0j} = k$. 
      */
     IloExpr e_root_generates_k(env);		
 	for (u_int c = 0; c < instance.n_nodes; c++){
@@ -527,13 +527,10 @@ Variables *kMST_ILP::modelMCF()
 	/*
      * No commodity is generated for the artificial root:
      * $\forall i, j: f^0_{ij} = 0$. 
-     */
-    IloExpr e_none_gen_for_root(env);		
+     */ 
 	for (u_int m = 0; m < n_edges; m++) {
-		e_none_gen_for_root += v->fss[0][m];	
+		model.add(v->fss[0][m] == 0);
 	} 
-	model.add(e_none_gen_for_root == 0);
-	e_none_gen_for_root.end();
 
 	/* 
 	 * Transmitted commodities end up at the target node:
