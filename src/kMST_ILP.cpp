@@ -389,21 +389,22 @@ Variables *kMST_ILP::modelSCF()
 	e_in_degree.endElements();
 	e_out_degree.endElements();
 
-
-	/* TODO: Missing formulation of constraints in next block. */
-
 	/* $f_{ij} \in [0, k - 1]$ variables denote the number of goods on edge (i, j). */
 	v->fs = createVarArrayFs(env, edges, n_edges);
 
 	IloExprArray e_in_flow = createExprArray_in_flow(env, edges, n_edges, v->fs, instance);
 	IloExprArray e_out_flow = createExprArray_out_flow(env, edges, n_edges, v->fs, instance);
 
+	/* 
+	 * Active nodes consume exactly 1 commodity, inactive nodes conserve flow.
+	 * $\forall i \neq 0: \sum_j (f_{ji} - f_{ij}) == v_i$ 
+     */
 	for (u_int i = 0; i < instance.n_nodes; i++) {
 		if (i == 0){
 			/* Don't add a constraint for the artificial root. */
 		} else if (i > 0) {
 			/* outflow = inflow -1 for active nodes, same for inactive nodes. */
-			model.add(v->vs[i] == e_in_flow[i] - e_out_flow[i]); 
+			model.add(v->vs[i] == e_in_flow[i] - e_out_flow[i]);
 		}
 	}
 	e_in_flow.endElements();
@@ -619,7 +620,6 @@ Variables *kMST_ILP::modelMCF()
 		model.add(e_total_flow <= this->k * v->vs[c]);
 		e_total_flow.end();
 	}
-
 	return v;
 }
 
