@@ -486,7 +486,6 @@ Variables *kMST_ILP::modelMCF()
 		const u_int j = edges[k].v2;
 		for (u_int l = 0; l < (u_int) instance.n_nodes; l++) {
 			v->fss[l][k] = IloBoolVar(env, Tools::indicesToString("f", l, i, j).c_str());
-			model.add(v->fss[l][k] >= 0);
 		}
 	}
 	
