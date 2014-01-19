@@ -4,6 +4,11 @@ Algorithmics VU, 2013W
 This repository contains the programming exercise for the Algorithmics
 course at the Vienna University of Technology.
 
+Results
+-------
+The report can be found at doc/report.tex
+The source code can be found at src/kMST_ILP.cpp
+
 Setup
 -----
 
