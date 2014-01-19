@@ -17,7 +17,7 @@
 
 \section{Problem Statement}
 
-Let $G=(V,A,w)$ be a directed graph, $w: A \rightarrow R_0^+$ a non-negative weighting function,and $k \leq |V|, k \in N^+$. The goal is to find a minimum weight tree spanning exactly $k$ nodes.
+Let $G=(V,A,w)$ be a directed graph, $w: A \rightarrow R_0^+$ a non-negative weighting function, and $k \leq |V|, k \in N^+$. The goal is to find a minimum weight tree spanning exactly $k$ nodes.
 
 The problem must be solved by (mixed) integer linear programs in three variants:
 \begin{enumerate}
@@ -162,6 +162,10 @@ For each commodity $l$, the total flow is at most k if node $l$ is active, 0 oth
 
 \section{Results and Discussion}
 
+Deciding for or against constraints isn't easy with the cplex solver. The ordering of constraints, and possibly also the number of expressions seem to influence performance up to a degree that makes it hard to differentiate between such artifacts and real improvements. 
+In our implementation, the MTZ variant clearly outperforms the other formulations.\footnote{Before a substantial code refactoring, which we are very reluctant to undo as it helps code readability, our MTZ results were even better than the ones reported here. We attribute this difference to the change in constraint ordering the refactoring incurred.} 
+Probably due to the $O(n^3)$ space complexity of the MCF formulation with respect to the $f^k_{ij}$ variables, the performance of this variant degrades with instance size. Moreover, the number of branch-and-bound nodes is very low for this formulation (almost always 0), so cplex does not have much room for improvement by selection of branching variables, either.
+
 % TODO: Specify units in table, benchmarking machine specs, how many repetitions,
 % how did we aggregate them (should be min), specify the command to execute the tests.
 
@@ -174,41 +178,26 @@ Instance & $k$ & \multicolumn{3}{c}{MTZ} & \multicolumn{3}{c}{SCF} & \multicolum
     Result & B\&B & Time(s) &
     Result & B\&B & Time(s) \\
 \midrule
-01.dat & 2   & 46   & 0     & 0.01   & 46   & 0    & 0.00   & 46   & 0 & 0.02 \\
-01.dat & 5   & 477  & 0     & 0.55   & 477  & 0    & 0.55   & 477  & 0 & 0.10 \\
-02.dat & 4   & 373  & 0     & 0.38   & 373  & 0    & 0.09   & 373  & 0 & 0.89 \\
-02.dat & 10  & 1390 & 0     & 0.70   & 1390 & 0    & 0.86   & 1390 & 0 & 0.64 \\
-03.dat & 10  & 725  & 20    & 0.88   & 725  & 0    & 1.55   & 725  & 0 & 4.38 \\
-03.dat & 25  & 3074 & 1706  & 2.72   & 3074 & 304  & 4.52   & 3074 & 0 & 4.98 \\
-04.dat & 14  & 909  & 84    & 1.89   & 909  & 382  & 5.04   & 909  & 0 & 20.92 \\
-04.dat & 35  & 3292 & 625   & 2.11   & 3292 & 3058 & 12.62  & 3292 & 0 & 13.45 \\
-05.dat & 20  & 1235 & 246   & 3.25   & 1235 & 1690 & 11.12  & 1235 & 0 & 30.03 \\
-05.dat & 50  & 4898 & 5610  & 8.98   & 4898 & 2957 & 21.44  & 4898 & 0 & 50.49 \\
-06.dat & 40  & 2068 & 33921 & 136.05 & 2068 & 1670 & 59.91  & -    & - & - \\
-06.dat & 100 & 6705 & 11926 & 45.40  & 6705 & 1416 & 49.55  & -    & - & - \\
-07.dat & 60  & 1335 & 1843  & 27.94  & 1335 & 1418 & 252.80 & -    & - & - \\
-07.dat & 150 & 4534 & 4168  & 48.73  & 4534 & 1485 & 257.25 & -    & - & - \\
-08.dat & 80  & 1620 & 2592  & 59.20  & 1620 & 2900 & 917.21 & -    & - & - \\
-08.dat & 200 & 5787 & 24268 & 188.73 & 5787 & 1426 & 513.02 & -    & - & - \\
+01.dat & 2   & 46   & 0     & 0.01 & 46   & 0    & 0.00 & 46   & 0   & 0.02 \\
+01.dat & 5   & 477  & 0     & 0.55 & 477  & 0    & 0.55 & 477  & 0   & 0.10 \\
+02.dat & 4   & 373  & 0     & 0.38 & 373  & 0    & 0.09 & 373  & 0   & 0.89 \\
+02.dat & 10  & 1390 & 0     & 0.70 & 1390 & 0    & 0.86 & 1390 & 0   & 0.64 \\
+03.dat & 10  & 725  & 20    & 0.88 & 725  & 0    & 1.55 & 725  & 0   & 4.38 \\
+03.dat & 25  & 3074 & 1706  & 2.72 & 3074 & 304  & 4.52 & 3074 & 0   & 4.98 \\
+04.dat & 14  & 909  & 84    & 1.89 & 909  & 382  & 5.04 & 909  & 0   & 20.9 \\
+04.dat & 35  & 3292 & 625   & 2.11 & 3292 & 3058 & 12.6 & 3292 & 0   & 13.5 \\
+05.dat & 20  & 1235 & 246   & 3.25 & 1235 & 1690 & 11.1 & 1235 & 0   & 30.0 \\
+05.dat & 50  & 4898 & 5610  & 8.98 & 4898 & 2957 & 21.4 & 4898 & 0   & 50.5 \\
+06.dat & 40  & 2068 & 33921 & 136  & 2068 & 1670 & 59.9 & 2068 & 105 & 1467 \\
+06.dat & 100 & 6705 & 11926 & 45.4 & 6705 & 1416 & 49.6 & 6705 & 0   & 1171 \\
+07.dat & 60  & 1335 & 1843  & 27.9 & 1335 & 1418 & 253  & -    & - & - \\
+07.dat & 150 & 4534 & 4168  & 48.7 & 4534 & 1485 & 257  & -    & - & - \\
+08.dat & 80  & 1620 & 2592  & 59.2 & 1620 & 2900 & 917  & -    & - & - \\
+08.dat & 200 & 5787 & 24268 & 189  & 5787 & 1426 & 513  & -    & - & - \\
 \bottomrule
 \end{tabular}
-\caption{Comparison of objective function value, branch-and-bound nodes, and runtime in seconds for the MIP variants MTZ, SCF and MCF.} 
+\caption{Comparison of objective function value, branch-and-bound nodes, and runtime in seconds for the MIP variants MTZ, SCF and MCF. Execution was performed on the ads server eowyn.ads.tuwien.ac.at. MCF results for the last two instances are missing as the calculation exceeded available resources.} 
 \label{fig:go}
 \end{figure}
-
-\begin{comment}
-Create a short document (preferably in LaTeX) of about 3
-pages containing:
-* Problem description
-* SCF, MCF, and MTZ formulations, and descriptions of used
-variables and constraints
-* Result table comparing all 3 formulations, including
-objective function values, running times, numbers of branch-and-bound nodes
-* Short interpretation of results
-
-TODO: MCF formulations
-TODO: Bench results
-TODO: Discussion
-\end{comment}
 
 \end{document}
