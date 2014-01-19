@@ -387,6 +387,7 @@ Variables *kMST_ILP::modelSCF()
 	e_out_degree.endElements();
 
 
+	/* TODO: Missing formulation of constraints in next block. */
 
 	/* $f_{ij} \in [0, k - 1]$ variables denote the number of goods on edge (i, j). */
 	v->fs = createVarArrayFs(env, edges, n_edges);
@@ -395,18 +396,11 @@ Variables *kMST_ILP::modelSCF()
 	IloExprArray e_out_flow = createExprArray_out_flow(env, edges, n_edges, v->fs, instance);
 
 	for (u_int i = 0; i < instance.n_nodes; i++) {
-		model.add(v->vs[i] <= e_out_flow[i] + e_in_flow[i]);
 		if (i == 0){
-			//do not add a constraint for in-degree of artificial root node (that's handled elsewhere)
-			//model.add(e_in_degree[i] == 0);
-			model.add(e_out_flow[0] == this->k);
+			/* Don't add a constraint for the artificial root. */
 		} else if (i > 0) {
-			//out-flow = inflow -1 for active nodes, same for inactive nodes
+			/* outflow = inflow -1 for active nodes, same for inactive nodes. */
 			model.add(v->vs[i] == e_in_flow[i] - e_out_flow[i]); 
-//			model.add(e_in_flow[i] >= e_out_degree[i]); //not so bad, bad
-//			model.add(e_out_flow[i] <= v->vs[i] * this->k); //baaad!
-//			model.add(e_out_flow[i] >= e_out_degree[i]); //baaaad!
-//		model.add(v->vs[i] * (this->k - 1) >= e_out_flow[i]); //so very very baaaad
 		}
 	}
 	e_in_flow.endElements();
@@ -424,7 +418,6 @@ Variables *kMST_ILP::modelSCF()
 		if (i == 0 || j == 0) {
 			model.add(v->fs[k] == this->k * v->xs[k]);
 		} else {  
-			model.add(v->fs[k] >= 0);
 			model.add(v->fs[k] <= (this->k) * v->xs[k]);
 		}
 	}
