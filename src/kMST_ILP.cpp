@@ -124,21 +124,20 @@ static vector<Instance::Edge> directed_edges(const vector<Instance::Edge> &es)
 }
 
 /* $x_{ij} \in \{0, 1\}$ variables denote whether edge (i, j) is active. */
-static IloBoolVarArray createVarArrayXs(IloEnv env, IloModel model, vector<Instance::Edge> edges, u_int n_edges)
+static IloBoolVarArray createVarArrayXs(IloEnv env, vector<Instance::Edge> edges, u_int n_edges)
 {
 	IloBoolVarArray xs = IloBoolVarArray(env, n_edges);
 	for (u_int k = 0; k < n_edges; k++) {
 		const u_int i = edges[k].v1;
 		const u_int j = edges[k].v2;
 		xs[k] = IloBoolVar(env, Tools::indicesToString("x", i, j).c_str());
-		model.add(xs[k] >= 0);
 	}
 	return xs;
 }
 
 
 /* $f_{ij} \in [0, k]$ variables denote the number of goods on edge (i, j). */
-static IloIntVarArray createVarArrayFs(IloEnv env, IloModel model,  vector<Instance::Edge> edges, u_int n_edges)
+static IloIntVarArray createVarArrayFs(IloEnv env,vector<Instance::Edge> edges, u_int n_edges)
 
 {
 	IloIntVarArray fs = IloIntVarArray(env, n_edges);
@@ -146,7 +145,6 @@ static IloIntVarArray createVarArrayFs(IloEnv env, IloModel model,  vector<Insta
 		const u_int i = edges[k].v1;
 		const u_int j = edges[k].v2;
 		fs[k] = IloIntVar(env, 0, k, Tools::indicesToString("f", i, j).c_str());
-		model.add(fs[k] >= 0);
 	}
 	return fs;
 }
@@ -155,12 +153,11 @@ static IloIntVarArray createVarArrayFs(IloEnv env, IloModel model,  vector<Insta
 /* 
  * $v_i \in \{0, 1\}$ variables denote whether node i is active. 
  */
-static IloBoolVarArray createVarArrayVs(IloEnv env, IloModel model, u_int n_nodes)
+static IloBoolVarArray createVarArrayVs(IloEnv env, u_int n_nodes)
 {
 	IloBoolVarArray vs = IloBoolVarArray(env, n_nodes);
 	for (u_int i = 0; i < n_nodes; i++) {
 		vs[i] = IloBoolVar(env, Tools::indicesToString("v", i).c_str());
-		model.add(vs[i] >= 0);
 	}
 	return vs;
 }
@@ -357,10 +354,10 @@ Variables *kMST_ILP::modelSCF()
 	const u_int n_edges = edges.size();
 
 	/* $x_{ij} \in \{0, 1\}$ variables denote whether edge (i, j) is active. */
-	v->xs = createVarArrayXs(env, model, edges, n_edges);
+	v->xs = createVarArrayXs(env, edges, n_edges);
 
 	/* $v_i \in \{0, 1\}$ variables denote whether node i is active. */
-	v->vs = createVarArrayVs(env, model, instance.n_nodes);
+	v->vs = createVarArrayVs(env, instance.n_nodes);
 
 	/* add objective function */
 	addObjectiveFunction(env, model, v->xs, edges, n_edges);
@@ -396,7 +393,7 @@ Variables *kMST_ILP::modelSCF()
 	/* TODO: Missing formulation of constraints in next block. */
 
 	/* $f_{ij} \in [0, k - 1]$ variables denote the number of goods on edge (i, j). */
-	v->fs = createVarArrayFs(env, model, edges, n_edges);
+	v->fs = createVarArrayFs(env, edges, n_edges);
 
 	IloExprArray e_in_flow = createExprArray_in_flow(env, edges, n_edges, v->fs, instance);
 	IloExprArray e_out_flow = createExprArray_out_flow(env, edges, n_edges, v->fs, instance);
@@ -441,10 +438,10 @@ Variables *kMST_ILP::modelMCF()
 	const u_int n_edges = edges.size();
 
 	/* $x_{ij} \in \{0, 1\}$ variables denote whether edge (i, j) is active. */
-	v->xs = createVarArrayXs(env, model, edges, n_edges);
+	v->xs = createVarArrayXs(env, edges, n_edges);
 
 	/* $v_i \in \{0, 1\}$ variables denote whether node i is active. */
-	v->vs = createVarArrayVs(env, model, instance.n_nodes);
+	v->vs = createVarArrayVs(env, instance.n_nodes);
 
 	/* add objective function */
 	addObjectiveFunction(env, model, v->xs, edges, n_edges);
@@ -636,10 +633,10 @@ Variables *kMST_ILP::modelMTZ()
 	const u_int n_edges = edges.size();
 
 	/* $x_{ij} \in \{0, 1\}$ variables denote whether edge (i, j) is active. */
-	v->xs = createVarArrayXs(env, model, edges, n_edges);
+	v->xs = createVarArrayXs(env, edges, n_edges);
 
 	/* $v_i \in \{0, 1\}$ variables denote whether node i is active. */
-	v->vs = createVarArrayVs(env, model, instance.n_nodes);
+	v->vs = createVarArrayVs(env, instance.n_nodes);
 
 	/* add objective function */
 	addObjectiveFunction(env, model, v->xs, edges, n_edges);
