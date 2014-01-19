@@ -671,7 +671,7 @@ Variables *kMST_ILP::modelMTZ()
 
     /***** MTZ specific part ***/
 
-	/* $u_i \in [0, k]$ variables are used to impose an order on nodes. */ /*in report*/
+	/* $u_i \in [0, k]$ variables are used to impose an order on nodes. */
 	v->us = IloIntVarArray(env, instance.n_nodes);
 	for (u_int i = 0; i < instance.n_nodes; i++) {
 		v->us[i] = IloIntVar(env, 0, k, Tools::indicesToString("u", i).c_str());
@@ -680,7 +680,7 @@ Variables *kMST_ILP::modelMTZ()
 	
 	IloExpr e3(env);
 	e3 += v->us[0];
-	/* $u_0 = 0$. Set level of artificial root 0 to 0. */ /*in report*/
+	/* $u_0 = 0$. Set level of artificial root 0 to 0. */
 	model.add(e3 == 0);
 	e3.end();
 
@@ -691,13 +691,13 @@ Variables *kMST_ILP::modelMTZ()
 		IloExpr e4(env);
 		e4 = v->us[i] + v->xs[k] - v->us[j] - (-v->xs[k] + 1) * this->k;
 		/* $\forall i, j: u_i + x_{ij} \leq u_j + (1 - x_{ij})k$. 
-		 * Enforce order hierarchy on nodes. */ /*in report*/
+		 * Enforce order hierarchy on nodes. */
 		model.add(e4 <= 0);
 		e4.end();
 	}
 
 	for (u_int i = 0; i < instance.n_nodes; i++) {
-		/* $\forall i: u_i <= nv_i$ force order of inactive nodes to 0 */ /*in report*/
+		/* $\forall i: u_i <= nv_i$ force order of inactive nodes to 0 */
 		/* helps with big instances 6,7,8 */
 		model.add(v->us[i] <= v->vs[i] * (int) instance.n_nodes);
 	}	
