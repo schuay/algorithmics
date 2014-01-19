@@ -15,26 +15,26 @@
 
 \section{Problem Statement}
 
-Let $G=(V,A,w)$ be a directed graph and $w: A \rightarrow R_0^+$ a non-negative weighting function, and $k \leq |V|, k \in N^+$. The goal is to find a minimum weight tree spanning exactly k nodes.
+Let $G=(V,A,w)$ be a directed graph, $w: A \rightarrow R_0^+$ a non-negative weighting function,and $k \leq |V|, k \in N^+$. The goal is to find a minimum weight tree spanning exactly $k$ nodes.
 
 The problem must be solved by (mixed) integer linear programs in three variants:
 \begin{enumerate}
-	\item Using Miller-Zucker-Temlin subtour elimination constraints
-	\item Using single commodity flows
-	\item Using multi commodity flows
+	\item Miller-Zucker-Temlin subtour elimination constraints,
+	\item single commodity flows, and
+	\item multi commodity flows.
 \end{enumerate}
-Problem instances are provided. For each instance, results have to be stated for $\ceil[\big]{\frac{1}{5}|V|}$ and  $\ceil[\big]{\frac{1}{2}|V|}$. The results must comprise 
+Problem instances are provided. For each instance, results have to be stated for $k = \ceil[\big]{\frac{1}{5}|V|}$ and  $k = \ceil[\big]{\frac{1}{2}|V|}$. The results must comprise:
 \begin{enumerate}
-\item Objective function value
-\item Number of branch and bound nodes
-\item Running time
+\item the objective function value,
+\item the number of branch and bound nodes, and
+\item the running time
 \end{enumerate}
 
 \section{MLP formulation} 
 \subsection{General}
 This section contains the generic portion of the MLP formulation that is common to all three formulations.
 
-Common to all variants, the problem solution involves an artificial root node that is added to the graph. It has index 0 and has outgoing arcs connecting it to each other node of the graph. Nevertheless, we denote the set of all nodes, including the artificial root node, as V, and the set of all arcs, including those of the artificial root node, as A. The constant $n$ is the size of the original graph: $n = |V| - 1$
+The problem solution involves an artificial root node that is added to the graph. It has index 0 and outgoing arcs connecting it to each other node of the graph. Nevertheless, we denote the set of all nodes, including the artificial root node, as $V$, and the set of all arcs, including those of the artificial root node, as $A$. The constant $n$ is the size of the original graph: $n = |V| - 1$.
 
 \subsubsection{Variables}
 \begin{eqnarray}
@@ -42,11 +42,11 @@ Common to all variants, the problem solution involves an artificial root node th
 \forall i \in \{0,\ldots,n\}: v_i \in \{0, 1\} && \text{node $i$ is selected} 
 \end{eqnarray}
 \subsubsection{Constraints}
-Exactly k nodes must be selected, not counting the artificial node 0.
+Exactly $k$ nodes must be selected, not counting the artificial node $0$.
 \begin{equation}
 \sum_{i\in\{1,\ldots,|V|\}} v_i = k
 \end{equation}
-Exactly $k-1$ edges must be selected, not counting the edges involving the artificial root node 0:
+Exactly $k-1$ edges must be selected, not counting the edges involving the artificial root node $0$:
 \begin{equation}
 \sum_{i>0, j>0, (i,j)\in A} x_{ij} = k - 1 
 \end{equation}
@@ -58,27 +58,35 @@ No arc may lead back to the artificial root node:
 \begin{equation}
 \sum_{j=1}^{n} x_{j0} = 0
 \end{equation}
-Deselected nodes have no selected outgoing arcs. Selected nodes have at most k - 1 selected outgoing arcs:
+Deselected nodes have no selected outgoing arcs. Selected nodes have at most $k - 1$ selected outgoing arcs:
 \begin{equation}
 \forall i \in \{1,\ldots,n\}: (k-1)v_i \geq \sum_{j:(i,j)\in A} x_{ij}
 \end{equation}
-Exactly one incoming selected edge for a selected node and none for a deselected node (omitting artificial root)
+Exactly one incoming selected edge for a selected node and none for a deselected node (omitting artificial root):
 \begin{equation}
 \forall j\in\{1,\ldots,n\}: \sum_{i\in\{1,\ldots,n\}} x_{ij} = v_j
 \end{equation}
 
-\subsubsection{Objective Function}
+Active nodes have at least one active arc:
 \begin{equation}
-\textbf{min} \sum_{(i, j) \in A, i>0, j>0} x_{ij},w(i,j) 
+\forall i\in\{0,\ldots,n\}:  v_i \leq \sum_{j:(i,j)\in A} (x_{ij} + x_{ji})
 \end{equation}
 
-\subsection{MTZ Subtour Eliminiation Constraints}
+\subsubsection{Objective Function}
+\begin{equation}
+\min \sum_{(i, j) \in A, i>0, j>0} x_{ij},w(i,j) 
+\end{equation}
+
+\subsection{MTZ Subtour Eliminiation}
+
+% TODO: Double-check correctness & completeness of this section.
+
 \subsubsection{Variables}
 \begin{eqnarray}
-u_i \in [0,r]  && \text{level of node $i$} \\
+u_i \in [0,r]  && \text{level of node $i$}
 \end{eqnarray}
 \subsubsection{Constraints}
-The artificial root node has level 0:
+The artificial root node has level $0$:
 \begin{equation}
 u_0 = 0
 \end{equation}
@@ -86,9 +94,9 @@ Enforce level hierarchy on nodes in the tree:
 \begin{equation}
 \forall i, j \in\{0,\ldots,n\}: u_i + x_{ij} \leq u_j + (1 - x_{ij})k
 \end{equation}
-Force level of deselected nodes to 0:
+Force level of deselected nodes to $0$:
 \begin{equation}
-\forall i \in \{0,\ldots,n\}: u_i <= nv_i
+\forall i \in \{0,\ldots,n\}: u_i \leq nv_i
 \end{equation}
 
 \subsection{Single Commodity Flow}
