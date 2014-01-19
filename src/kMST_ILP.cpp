@@ -310,7 +310,7 @@ static IloExprArray createExprArray_out_degree(IloEnv env, vector<Instance::Edge
 /********************************** SCF specific methods ********************************/
 
 /**
- * Create expression for out-flow for each node.
+ * Create expression for in-flow for each node.
  */  
 static IloExprArray createExprArray_in_flow(IloEnv env, vector<Instance::Edge> edges, u_int n_edges, IloIntVarArray fs,  Instance& instance)
 {
@@ -326,7 +326,7 @@ static IloExprArray createExprArray_in_flow(IloEnv env, vector<Instance::Edge> e
 }
 
 /**
- * Create expression for in-flow for each node.
+ * Create expression for out-flow for each node.
  */
 static IloExprArray createExprArray_out_flow(IloEnv env, vector<Instance::Edge> edges, u_int n_edges, IloIntVarArray fs, Instance& instance)
 {
