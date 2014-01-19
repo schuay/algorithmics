@@ -640,8 +640,6 @@ Variables *kMST_ILP::modelMCF()
      */
 	for (u_int c = 0; c < (u_int) this->k; c++){
 		for (u_int m = 0; m < n_edges; m++) {
-			const u_int i = edges[m].v1;
-			const u_int j = edges[m].v2;
 			model.add(v->fss[c][m] <= v->xs[m]);
 		} 
 	}
