@@ -134,14 +134,14 @@ static IloBoolVarArray createVarArrayXs(IloEnv env, vector<Instance::Edge> edges
 	return xs;
 }
 
-/* $f_{ij} \in [0, k - 1]$ variables denote the number of goods on edge (i, j). */
+/* $f_{ij} \in [0, k]$ variables denote the number of goods on edge (i, j). */
 static IloIntVarArray createVarArrayFs(IloEnv env, vector<Instance::Edge> edges, u_int n_edges)
 {
 	IloIntVarArray fs = IloIntVarArray(env, n_edges);
 	for (u_int k = 0; k < n_edges; k++) {
 		const u_int i = edges[k].v1;
 		const u_int j = edges[k].v2;
-		fs[k] = IloIntVar(env, 0, k - 1, Tools::indicesToString("f", i, j).c_str());
+		fs[k] = IloIntVar(env, 0, k, Tools::indicesToString("f", i, j).c_str());
 	}
 	return fs;
 }
