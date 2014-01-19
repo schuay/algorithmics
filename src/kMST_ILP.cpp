@@ -590,7 +590,13 @@ Variables *kMST_ILP::modelMCF()
 	 */
 
 	/*
-	 * For all nodes: The sum of net flow at node i over all commodities must be == v
+	 * For all nodes: The sum of net flow at node i over all commodities must be == v_i. 
+	 *  I.e.: 
+     *   * each active node consumes exactly 1 commodity; for this commodity, the net flow == 1
+     *   * inactive nodes don't consume commodities
+     *   * active nodes pass on all commodities except for the one they consume, for the former, the net flow == 0 
+	 * For all commodities: The sum of net flow of commodity c over all nodes must be == 1. i.e., exactly 1 node consumes the commodity c.
+     * 
 	 */
 	 IloExprArray e_net_flow_sum_per_node(env,instance.n_nodes);
 	 for (u_int m = 0; m < instance.n_nodes; m++){
@@ -621,10 +627,6 @@ Variables *kMST_ILP::modelMCF()
 		}
 		
 		//sum over all net flows must be 1
-
-//		for (u_int m = 0; m < instance.n_nodes; m++){
-//			model.add(e_in_flow_k[m] - e_out_flow_k[m] == );
-//		}
  		model.add(e_net_flow_sum_per_comm == 1);
 		e_in_flow_k.endElements();
 		e_out_flow_k.endElements();
