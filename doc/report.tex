@@ -1,5 +1,6 @@
 \documentclass{article}
 
+\usepackage{booktabs}
 \usepackage{comment}
 \usepackage{graphicx}
 \usepackage{mathtools}
@@ -127,6 +128,25 @@ has exactly $k$ resources:
 
 \section{Results and Discussion}
 
+% TODO: Specify units in table, benchmarking machine specs, how many repetitions,
+% how did we aggregate them (should be min), specify the command to execute the tests.
+
+\begin{figure}[H]
+\centering
+\begin{tabular}{lllllllllll}
+\toprule
+Instance & $k$ & \multicolumn{3}{c}{MTZ} & \multicolumn{3}{c}{SCF} & \multicolumn{3}{c}{MCF} \\
+& & Result & B\&B & Time &
+    Result & B\&B & Time &
+    Result & B\&B & Time \\
+\midrule
+01.dat & 2 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+\bottomrule
+\end{tabular}
+\caption{Runtimes in nanoseconds per add() operation on 4 cores.} % TODO: Change me
+\label{fig:go}
+\end{figure}
+
 \begin{comment}
 Create a short document (preferably in LaTeX) of about 3
 pages containing:
@@ -137,9 +157,8 @@ variables and constraints
 objective function values, running times, numbers of branch-and-bound nodes
 * Short interpretation of results
 
-TODO: SCF, MCF formulations
-TODO: Bench results, bench machine specs,
-      benching method (repetitions, min of 5? 10?)
+TODO: MCF formulations
+TODO: Bench results
 TODO: Discussion
 \end{comment}
 
