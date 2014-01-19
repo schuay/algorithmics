@@ -36,7 +36,7 @@ Problem instances are provided. For each instance, results have to be stated for
 \subsection{General}
 This section contains the generic portion of the MLP formulation that is common to all three formulations.
 
-The problem solution involves an artificial root node that is added to the graph. It has index 0 and outgoing arcs connecting it to each other node of the graph. Nevertheless, we denote the set of all nodes, including the artificial root node, as $V$, and the set of all arcs, including those of the artificial root node, as $A$. The constant $n$ is the size of the original graph: $n = |V| - 1$.
+The problem solution involves an artificial root node that is added to the graph. It has index 0 and outgoing arcs connecting it to each other node of the graph. Nevertheless, we denote the set of all nodes, including the artificial root node, as $V$, and the set of all arcs, including those of the artificial root node, as $A$. The constant $n$ is the size of the original graph, i.e. $n = |V| - 1$.
 
 \subsubsection{Variables}
 \begin{eqnarray}
@@ -48,7 +48,7 @@ Exactly $k$ nodes must be selected, not counting the artificial node $0$.
 \begin{equation}
 \sum_{i\in\{1,\ldots,|V|\}} v_i = k
 \end{equation}
-Exactly $k-1$ edges must be selected, not counting the edges involving the artificial root node $0$:
+Exactly $k-1$ arcs must be selected, not counting the arcs involving the artificial root node $0$:
 \begin{equation}
 \sum_{i>0, j>0, (i,j)\in A} x_{ij} = k - 1 
 \end{equation}
@@ -64,7 +64,7 @@ Deselected nodes have no selected outgoing arcs. Selected nodes have at most $k 
 \begin{equation}
 \forall i \in \{1,\ldots,n\}: (k-1)v_i \geq \sum_{j:(i,j)\in A} x_{ij}
 \end{equation}
-Exactly one incoming selected edge for a selected node and none for a deselected node (omitting artificial root):
+Exactly one incoming selected arc for a selected node and none for a deselected node (omitting artificial root):
 \begin{equation}
 \forall j\in\{1,\ldots,n\}: \sum_{i\in\{1,\ldots,n\}} x_{ij} = v_j
 \end{equation}
@@ -103,7 +103,7 @@ Force level of deselected nodes to $0$:
 \subsection{Single Commodity Flow}
 \subsubsection{Variables}
 \begin{eqnarray}
-f_{ij} \in [0, k]  && \text{number of resources on edge } x_{ij}
+f_{ij} \in [0, k]  && \text{number of resources on arc $(i,j)$}
 \end{eqnarray}
 \subsubsection{Constraints}
 Every active node consumes exactly one resource:
@@ -123,8 +123,42 @@ has exactly $k$ resources:
 \subsection{Multi Commodity Flow}
 \subsubsection{Variables}
 \begin{eqnarray}
+f^k_{ij} \in {0, 1}  && \text{flow of commodity for node $k$ on arc $(i,j)$  } 
 \end{eqnarray}
+
 \subsubsection{Constraints}
+Each commodity $l$ is generated exactly once by the artificial root node if node $l$ is active, not at all otherwise:
+\begin{equation}
+\forall l \in \{1,\ldots,n\}: \sum_{j:j>0,(0,j) \in A} f^l_{0j} = v_l
+\end{equation}
+The artifical root node generates k commodities:
+\begin{equation}
+\forall l \in \{0,\ldots,n\}\sum_{j:j>0,(0,j) \in A} f^l_{0j} = k
+\end{equation}
+No commodity is generated for the artificial root node:
+\begin{equation}
+\forall (i,j) \in A: f^0_{ij} = 0 
+\end{equation}
+Transmitted commodities reach their target node:
+\begin{equation}
+\forall l \in \{1,\ldots,n\}: \sum_{i:(i,l) \in A} f^l_{il} = v_l
+\end{equation}
+Each commodity stays at its target node:
+\begin{equation}
+\forall l \in \{1,\ldots,n\}: \sum_{j:(l,j) \in A} f^l_{lj} = 0
+\end{equation}
+Flow is conserved for commodity $l$ when it is not at target node $l$:
+\begin{equation}
+\forall l \in \{1,\ldots,n\}: \sum_{j:j \neq l, (i,j) \in A} f^l_{ij} = \sum_{j:j \neq l, (j,i) \in A} f^l_{ji}
+\end{equation}
+Commodities may only be transmitted on active arcs:
+\begin{equation}
+\forall l, i, j \in \{0,\ldots,n\}, (i,j) \in A: f^l_{ij} \leq x_{ij}
+\end{equation}
+For each commodity $l$, the total flow is at most k if node $l$ is active, 0 otherwise:
+\begin{equation}
+\forall l, \in \{0,\ldots,n\} \sum_{i,j:(i,j) \in A} f^l_{ij} <= v_l
+\end{equation}
 
 \section{Results and Discussion}
 
@@ -136,14 +170,29 @@ has exactly $k$ resources:
 \begin{tabular}{lllllllllll}
 \toprule
 Instance & $k$ & \multicolumn{3}{c}{MTZ} & \multicolumn{3}{c}{SCF} & \multicolumn{3}{c}{MCF} \\
-& & Result & B\&B & Time &
-    Result & B\&B & Time &
-    Result & B\&B & Time \\
+& & Result & B\&B & Time(s) &
+    Result & B\&B & Time(s) &
+    Result & B\&B & Time(s) \\
 \midrule
-01.dat & 2 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+01.dat & 2   & 46   & 0     & 0.01   & 46   & 0    & 0.00   & 46   & 0 & 0.02 \\
+01.dat & 5   & 477  & 0     & 0.55   & 477  & 0    & 0.55   & 477  & 0 & 0.10 \\
+02.dat & 4   & 373  & 0     & 0.38   & 373  & 0    & 0.09   & 373  & 0 & 0.89 \\
+02.dat & 10  & 1390 & 0     & 0.70   & 1390 & 0    & 0.86   & 1390 & 0 & 0.64 \\
+03.dat & 10  & 725  & 20    & 0.88   & 725  & 0    & 1.55   & 725  & 0 & 4.38 \\
+03.dat & 25  & 3074 & 1706  & 2.72   & 3074 & 304  & 4.52   & 3074 & 0 & 4.98 \\
+04.dat & 14  & 909  & 84    & 1.89   & 909  & 382  & 5.04   & 909  & 0 & 20.92 \\
+04.dat & 35  & 3292 & 625   & 2.11   & 3292 & 3058 & 12.62  & 3292 & 0 & 13.45 \\
+05.dat & 20  & 1235 & 246   & 3.25   & 1235 & 1690 & 11.12  & 1235 & 0 & 30.03 \\
+05.dat & 50  & 4898 & 5610  & 8.98   & 4898 & 2957 & 21.44  & 4898 & 0 & 50.49 \\
+06.dat & 40  & 2068 & 33921 & 136.05 & 2068 & 1670 & 59.91  & -    & - & - \\
+06.dat & 100 & 6705 & 11926 & 45.40  & 6705 & 1416 & 49.55  & -    & - & - \\
+07.dat & 60  & 1335 & 1843  & 27.94  & 1335 & 1418 & 252.80 & -    & - & - \\
+07.dat & 150 & 4534 & 4168  & 48.73  & 4534 & 1485 & 257.25 & -    & - & - \\
+08.dat & 80  & 1620 & 2592  & 59.20  & 1620 & 2900 & 917.21 & -    & - & - \\
+08.dat & 200 & 5787 & 24268 & 188.73 & 5787 & 1426 & 513.02 & -    & - & - \\
 \bottomrule
 \end{tabular}
-\caption{Runtimes in nanoseconds per add() operation on 4 cores.} % TODO: Change me
+\caption{Comparison of objective function value, branch-and-bound nodes, and runtime in seconds for the MIP variants MTZ, SCF and MCF.} 
 \label{fig:go}
 \end{figure}
 
