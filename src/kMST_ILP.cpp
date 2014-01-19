@@ -85,6 +85,7 @@ void kMST_ILP::solve()
 		cout << "CPU time: " << Tools::CPUtime() << "\n\n";
 
 		// vars->print(cplex);
+
 		delete vars;
 	}
 	catch( IloException& e ) {
@@ -123,25 +124,29 @@ static vector<Instance::Edge> directed_edges(const vector<Instance::Edge> &es)
 }
 
 /* $x_{ij} \in \{0, 1\}$ variables denote whether edge (i, j) is active. */
-static IloBoolVarArray createVarArrayXs(IloEnv env, vector<Instance::Edge> edges, u_int n_edges)
+static IloBoolVarArray createVarArrayXs(IloEnv env, IloModel model, vector<Instance::Edge> edges, u_int n_edges)
 {
 	IloBoolVarArray xs = IloBoolVarArray(env, n_edges);
 	for (u_int k = 0; k < n_edges; k++) {
 		const u_int i = edges[k].v1;
 		const u_int j = edges[k].v2;
 		xs[k] = IloBoolVar(env, Tools::indicesToString("x", i, j).c_str());
+		model.add(xs[k] >= 0);
 	}
 	return xs;
 }
 
+
 /* $f_{ij} \in [0, k]$ variables denote the number of goods on edge (i, j). */
-static IloIntVarArray createVarArrayFs(IloEnv env, vector<Instance::Edge> edges, u_int n_edges)
+static IloIntVarArray createVarArrayFs(IloEnv env, IloModel model,  vector<Instance::Edge> edges, u_int n_edges)
+
 {
 	IloIntVarArray fs = IloIntVarArray(env, n_edges);
 	for (u_int k = 0; k < n_edges; k++) {
 		const u_int i = edges[k].v1;
 		const u_int j = edges[k].v2;
 		fs[k] = IloIntVar(env, 0, k, Tools::indicesToString("f", i, j).c_str());
+		model.add(fs[k] >= 0);
 	}
 	return fs;
 }
@@ -150,11 +155,12 @@ static IloIntVarArray createVarArrayFs(IloEnv env, vector<Instance::Edge> edges,
 /* 
  * $v_i \in \{0, 1\}$ variables denote whether node i is active. 
  */
-static IloBoolVarArray createVarArrayVs(IloEnv env, u_int n_nodes)
+static IloBoolVarArray createVarArrayVs(IloEnv env, IloModel model, u_int n_nodes)
 {
 	IloBoolVarArray vs = IloBoolVarArray(env, n_nodes);
 	for (u_int i = 0; i < n_nodes; i++) {
 		vs[i] = IloBoolVar(env, Tools::indicesToString("v", i).c_str());
+		model.add(vs[i] >= 0);
 	}
 	return vs;
 }
@@ -351,10 +357,10 @@ Variables *kMST_ILP::modelSCF()
 	const u_int n_edges = edges.size();
 
 	/* $x_{ij} \in \{0, 1\}$ variables denote whether edge (i, j) is active. */
-	v->xs = createVarArrayXs(env, edges, n_edges);
+	v->xs = createVarArrayXs(env, model, edges, n_edges);
 
 	/* $v_i \in \{0, 1\}$ variables denote whether node i is active. */
-	v->vs = createVarArrayVs(env, instance.n_nodes);
+	v->vs = createVarArrayVs(env, model, instance.n_nodes);
 
 	/* add objective function */
 	addObjectiveFunction(env, model, v->xs, edges, n_edges);
@@ -390,7 +396,7 @@ Variables *kMST_ILP::modelSCF()
 	/* TODO: Missing formulation of constraints in next block. */
 
 	/* $f_{ij} \in [0, k - 1]$ variables denote the number of goods on edge (i, j). */
-	v->fs = createVarArrayFs(env, edges, n_edges);
+	v->fs = createVarArrayFs(env, model, edges, n_edges);
 
 	IloExprArray e_in_flow = createExprArray_in_flow(env, edges, n_edges, v->fs, instance);
 	IloExprArray e_out_flow = createExprArray_out_flow(env, edges, n_edges, v->fs, instance);
@@ -435,10 +441,10 @@ Variables *kMST_ILP::modelMCF()
 	const u_int n_edges = edges.size();
 
 	/* $x_{ij} \in \{0, 1\}$ variables denote whether edge (i, j) is active. */
-	v->xs = createVarArrayXs(env, edges, n_edges);
+	v->xs = createVarArrayXs(env, model, edges, n_edges);
 
 	/* $v_i \in \{0, 1\}$ variables denote whether node i is active. */
-	v->vs = createVarArrayVs(env, instance.n_nodes);
+	v->vs = createVarArrayVs(env, model, instance.n_nodes);
 
 	/* add objective function */
 	addObjectiveFunction(env, model, v->xs, edges, n_edges);
@@ -474,13 +480,13 @@ Variables *kMST_ILP::modelMCF()
     /***** MCF specific part ***/
 
 	/* $f^k_{ij} \in \{0, 1\}$ variables denote the flow on edge (i, j) for commodity k. */
-	for (u_int i = 0; i < (u_int) this->k; i++) {
+	for (u_int i = 0; i < instance.n_nodes; i++) {
 		v->fss.push_back(IloBoolVarArray(env, n_edges));
 	}
 	for (u_int k = 0; k < n_edges; k++) {
 		const u_int i = edges[k].v1;
 		const u_int j = edges[k].v2;
-		for (u_int l = 0; l < (u_int) this->k; l++) {
+		for (u_int l = 0; l < (u_int) instance.n_nodes; l++) {
 			v->fss[l][k] = IloBoolVar(env, Tools::indicesToString("f", l, i, j).c_str());
 			model.add(v->fss[l][k] >= 0);
 		}
@@ -488,9 +494,9 @@ Variables *kMST_ILP::modelMCF()
 	
 	/* 
      * Each commodity l is generated once by the artificial root node:
-	 * $\forall l: \sum_j f^l_{0j} \leq 1$.                                                
+	 * $\forall l>0: \sum_j f^l_{0j} == 1$ if node l is active, 0 otherwise
      */
-	for (u_int c = 0; c < (u_int) this->k; c++){
+	for (u_int c = 1; c < instance.n_nodes; c++){
 		IloExpr e_one_commodity(env);		
 		for (u_int m = 0; m < n_edges; m++) {
 			const u_int i = edges[m].v1;
@@ -499,7 +505,7 @@ Variables *kMST_ILP::modelMCF()
 				e_one_commodity += v->fss[c][m];	
 			}
 		} 
-		model.add(e_one_commodity == 1);
+		model.add(e_one_commodity == v->vs[c]);
 		e_one_commodity.end();
 	}
 
@@ -508,7 +514,7 @@ Variables *kMST_ILP::modelMCF()
      * $\sum_{l, j} f^l_{0j} = k$. 
      */
     IloExpr e_root_generates_k(env);		
-	for (u_int c = 0; c < (u_int) this->k; c++){
+	for (u_int c = 0; c < instance.n_nodes; c++){
 		for (u_int m = 0; m < n_edges; m++) {
 			const u_int i = edges[m].v1;
 			const u_int j = edges[m].v2;
@@ -518,6 +524,7 @@ Variables *kMST_ILP::modelMCF()
 		} 
 	}
 	model.add(e_root_generates_k == this->k);
+	cout << "root+k: " << e_root_generates_k << "\n";
 	e_root_generates_k.end();
 
 
@@ -526,24 +533,19 @@ Variables *kMST_ILP::modelMCF()
      * $\forall i, j: f^0_{ij} = 0$. 
      */
     IloExpr e_none_gen_for_root(env);		
-	for (u_int c = 0; c < (u_int) this->k; c++){
-		for (u_int m = 0; m < n_edges; m++) {
-			const u_int i = edges[m].v1;
-			const u_int j = edges[m].v2;
-			if (i == 0 && j == 0){
-				e_none_gen_for_root += v->fss[c][m];	
-			}
-		} 
-	}
+	for (u_int m = 0; m < n_edges; m++) {
+		const u_int i = edges[m].v1;
+		const u_int j = edges[m].v2;
+		e_none_gen_for_root += v->fss[0][m];	
+	} 
 	model.add(e_none_gen_for_root == 0);
 	e_none_gen_for_root.end();
 
 	/* 
 	 * Transmitted commodities end up at the target node:
-	 * $\forall l: \sum_i f^l_{il} = \sum_j f^l_{0j}$. 
+	 * $\forall l>0: \sum_i f^l_{il} = \sum_j f^l_{0j}$. (here: = v_l) 
      */
-/*
-	for (u_int c = 0; c < (u_int) this->k; c++){
+	for (u_int c = 1; c < (u_int) instance.n_nodes; c++){
 		IloExpr e_commodity_reaches_target(env);		
 		for (u_int m = 0; m < n_edges; m++) {
 			const u_int i = edges[m].v1;
@@ -552,30 +554,28 @@ Variables *kMST_ILP::modelMCF()
 				e_commodity_reaches_target += v->fss[c][m];	
 			}
 		} 
-		model.add(e_commodity_reaches_target == 1);
+		model.add(e_commodity_reaches_target == v->vs[c]);
 		e_commodity_reaches_target.end();
 	}
-*/
 
 
 	/* 
 	 * Once reached, the commodity never leaves the target node:
-	 * $\forall l: \sum_j f^l_{lj} = 0$.  
+	 * $\forall l>0: \sum_j f^l_{lj} = 0$.  
      */
-/*
-	for (u_int c = 0; c < (u_int) this->k; c++){
+	for (u_int c = 1; c < (u_int) instance.n_nodes; c++){
 		IloExpr e_commodity_stays_at_target(env);		
 		for (u_int m = 0; m < n_edges; m++) {
 			const u_int i = edges[m].v1;
 			const u_int j = edges[m].v2;
-			if (i == c && j != c &&){
+			if (i == c && j != c){
 				e_commodity_stays_at_target += v->fss[c][m];	
 			}
 		} 
 		model.add(e_commodity_stays_at_target == 0);
 		e_commodity_stays_at_target.end();
 	}
-*/
+
 
 	/* 
 	 * Flow is conserved when not at target node. 
@@ -595,7 +595,7 @@ Variables *kMST_ILP::modelMCF()
 	 for (u_int m = 0; m < instance.n_nodes; m++){
 			e_net_flow_sum_per_node[m] = IloExpr(env);
 	 }
-	 for (u_int c = 0; c < (u_int) this->k; c++){
+	 for (u_int c = 0; c < (u_int) instance.n_nodes; c++){
 		IloExpr e_net_flow_sum_per_comm = IloExpr(env);
 		IloExprArray e_in_flow_k(env, instance.n_nodes);		
 		IloExprArray e_out_flow_k(env, instance.n_nodes);		
@@ -615,12 +615,15 @@ Variables *kMST_ILP::modelMCF()
 			e_net_flow_k[m] = e_in_flow_k[m] - e_out_flow_k[m];
 			e_net_flow_sum_per_node[m] += e_net_flow_k[m];
 			e_net_flow_sum_per_comm += e_net_flow_k[m];
-		    //if net flow is 1, v[k] must be 1 
+		    //if net flow is 1, v_k must be 1 
 			model.add(e_net_flow_k[m] <= v->vs[m]);
 		}
 		
-		//sum over all net flows must be 1
- 		model.add(e_net_flow_sum_per_comm == 1);
+		//sum over all net flows must be 1 for an active commodity(=node), 0 for an inactive commodity
+		if (c > 0){
+			//special handling for node 0: no commodity is generated although it's active
+	 		model.add(e_net_flow_sum_per_comm == v->vs[c]);
+		}
 		e_in_flow_k.endElements();
 		e_out_flow_k.endElements();
 		e_net_flow_k.endElements();
@@ -638,27 +641,65 @@ Variables *kMST_ILP::modelMCF()
 	 * Commodities may only be transmitted on active edges:
 	 * $\forall l, i, j: f^l_{ij} \leq x_{ij}$. 
      */
-	for (u_int c = 0; c < (u_int) this->k; c++){
+	for (u_int c = 0; c < (u_int) instance.n_nodes; c++){
 		for (u_int m = 0; m < n_edges; m++) {
 			model.add(v->fss[c][m] <= v->xs[m]);
 		} 
 	}
 
-	/* 
-
-	 * $\forall l, i, j: f^l_{ij} \leq x_{ij}$. 
-     */
-	for (u_int c = 0; c < (u_int) this->k; c++){
+	/*
+	 * The cumulative commodity flow strictly decreases in each active node.
+	 *
+	 * Let $f^{out}_i$ be the cumulative out-flow at node i and $f^{in}_i$ the cumulative in-flow (the sum over all
+	 * commodities). If there is an arc transporting flow from 
+     * node i to node j, then $f^{in}_i - f^{out}_i == v_i$ 
+     * 
+	 */
+	 IloExprArray e_cumul_out_flow(env,instance.n_nodes);
+	 IloExprArray e_cumul_in_flow(env,instance.n_nodes);
+	 for (u_int m = 0; m < instance.n_nodes; m++){
+			e_cumul_out_flow[m] = IloExpr(env);
+		    e_cumul_in_flow[m] = IloExpr(env);
+	 }
+	 //walk over commodities, sum up flow per node
+	 for (u_int c = 0; c < instance.n_nodes; c++){
 		for (u_int m = 0; m < n_edges; m++) {
 			const u_int i = edges[m].v1;
 			const u_int j = edges[m].v2;
-			if (i > 0 && j > 0){
-				model.add(v->fss[c][m] <= v->xs[m]);
-			}   
+			e_cumul_out_flow[i] += v->fss[c][m];	
+			e_cumul_in_flow[j] += v->fss[c][m];	
 		} 
-	}
+	 }
+	 //walk over nodes, make sure cumulative in-flow == cumulative out-flow +1 if active, equal if inactive
+     for (u_int m = 1; m < instance.n_nodes; m++){
+		cout << "m: " << m << "\n";
+		cout << "in-flow: "<< e_cumul_in_flow[m] <<"\n";
+		cout << "out-flow: "<< e_cumul_out_flow[m] <<"\n";
+		model.add(e_cumul_in_flow[m] - e_cumul_out_flow[m] == v->vs[m]);
+ 	 }
 
+	/*
+	 * The cumulative commodity flow decreases along each active edge.
+	 *
+	 * Let b_i be the cumulative out-flow at node i (the sum over all
+	 * commodities). If there is an arc transporting flow from 
+     * node i to node j, then b_i >= b_j. 
+	 * If the arc does not transport flow, b_i == b_j == 0
+     * 
+	 */
 
+	 //walk over edges, make sure out-flow is higher at source than at target
+     for (u_int m = 0; m < n_edges; m++){
+		const u_int i = edges[m].v1;
+		const u_int j = edges[m].v2;
+		//diff is > 0 if arc active, may be anything if arc inactive (min value: -k)
+		//using -1 and >= instead of > to avoid cplex problems
+		if (i > 0 && j > 0) {
+			model.add(e_cumul_out_flow[i] - 1 - e_cumul_out_flow[j] >= -(1 - v->xs[m]) * this->k );
+		}
+ 	 }
+	e_cumul_out_flow.endElements();
+	e_cumul_in_flow.endElements();
 
 	return v;
 }
@@ -673,10 +714,10 @@ Variables *kMST_ILP::modelMTZ()
 	const u_int n_edges = edges.size();
 
 	/* $x_{ij} \in \{0, 1\}$ variables denote whether edge (i, j) is active. */
-	v->xs = createVarArrayXs(env, edges, n_edges);
+	v->xs = createVarArrayXs(env, model, edges, n_edges);
 
 	/* $v_i \in \{0, 1\}$ variables denote whether node i is active. */
-	v->vs = createVarArrayVs(env, instance.n_nodes);
+	v->vs = createVarArrayVs(env, model, instance.n_nodes);
 
 	/* add objective function */
 	addObjectiveFunction(env, model, v->xs, edges, n_edges);
