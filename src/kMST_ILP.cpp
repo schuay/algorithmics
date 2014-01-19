@@ -523,8 +523,7 @@ Variables *kMST_ILP::modelMCF()
 			}
 		} 
 	}
-	model.add(e_root_generates_k == this->k);
-	cout << "root+k: " << e_root_generates_k << "\n";
+	model.add(e_root_generates_k == this->k);   
 	e_root_generates_k.end();
 
 
@@ -534,8 +533,6 @@ Variables *kMST_ILP::modelMCF()
      */
     IloExpr e_none_gen_for_root(env);		
 	for (u_int m = 0; m < n_edges; m++) {
-		const u_int i = edges[m].v1;
-		const u_int j = edges[m].v2;
 		e_none_gen_for_root += v->fss[0][m];	
 	} 
 	model.add(e_none_gen_for_root == 0);
@@ -577,65 +574,31 @@ Variables *kMST_ILP::modelMCF()
 	}
 
 
-	/* 
+	/*
 	 * Flow is conserved when not at target node. 
 	 * $\forall j, l s.t. j \neq l: \sum_i f^l_{ij} = \sum_i f^l_{ji}$. 
 	 */
-
-	/*
-	 * For all nodes: The sum of net flow at node i over all commodities must be == v_i. 
-	 *  I.e.: 
-     *   * each active node consumes exactly 1 commodity; for this commodity, the net flow == 1
-     *   * inactive nodes don't consume commodities
-     *   * active nodes pass on all commodities except for the one they consume, for the former, the net flow == 0 
-	 * For all commodities: The sum of net flow of commodity c over all nodes must be == 1. i.e., exactly 1 node consumes the commodity c.
-     * 
-	 */
-	 IloExprArray e_net_flow_sum_per_node(env,instance.n_nodes);
-	 for (u_int m = 0; m < instance.n_nodes; m++){
-			e_net_flow_sum_per_node[m] = IloExpr(env);
-	 }
 	 for (u_int c = 0; c < (u_int) instance.n_nodes; c++){
-		IloExpr e_net_flow_sum_per_comm = IloExpr(env);
-		IloExprArray e_in_flow_k(env, instance.n_nodes);		
-		IloExprArray e_out_flow_k(env, instance.n_nodes);		
-		IloExprArray e_net_flow_k(env, instance.n_nodes);
+		IloExprArray e_in_flow(env, instance.n_nodes);		
+		IloExprArray e_out_flow(env, instance.n_nodes);		
 		for (u_int m = 0; m < instance.n_nodes; m++){
-			e_in_flow_k[m] = IloExpr(env);
-			e_out_flow_k[m] = IloExpr(env);
-			e_net_flow_k[m] = IloExpr(env);
+			e_in_flow[m] = IloExpr(env);
+			e_out_flow[m] = IloExpr(env);
 		}
 		for (u_int m = 0; m < n_edges; m++) {
 			const u_int i = edges[m].v1;
 			const u_int j = edges[m].v2;
-			e_out_flow_k[i] += v->fss[c][m];	
-			e_in_flow_k[j] += v->fss[c][m];	
+			e_out_flow[i] += v->fss[c][m];	
+			e_in_flow[j] += v->fss[c][m];	
 		} 
 		for (u_int m = 1; m < instance.n_nodes; m++){
-			e_net_flow_k[m] = e_in_flow_k[m] - e_out_flow_k[m];
-			e_net_flow_sum_per_node[m] += e_net_flow_k[m];
-			e_net_flow_sum_per_comm += e_net_flow_k[m];
-		    //if net flow is 1, v_k must be 1 
-			model.add(e_net_flow_k[m] <= v->vs[m]);
+			if (m != c) {
+				model.add(e_in_flow[m] == e_out_flow[m]);
+			}
 		}
-		
-		//sum over all net flows must be 1 for an active commodity(=node), 0 for an inactive commodity
-		if (c > 0){
-			//special handling for node 0: no commodity is generated although it's active
-	 		model.add(e_net_flow_sum_per_comm == v->vs[c]);
-		}
-		e_in_flow_k.endElements();
-		e_out_flow_k.endElements();
-		e_net_flow_k.endElements();
-		e_net_flow_sum_per_comm.end();
+		e_in_flow.endElements();
+		e_out_flow.endElements();
 	 }
-	 //now make sure each net flow sum per node == v
-     for (u_int m = 1; m < instance.n_nodes; m++){
-		model.add(e_net_flow_sum_per_node[m] == v->vs[m]);
- 	 }
-	e_net_flow_sum_per_node.endElements();
-
-	
 
 	/* 
 	 * Commodities may only be transmitted on active edges:
@@ -647,59 +610,18 @@ Variables *kMST_ILP::modelMCF()
 		} 
 	}
 
-	/*
-	 * The cumulative commodity flow strictly decreases in each active node.
-	 *
-	 * Let $f^{out}_i$ be the cumulative out-flow at node i and $f^{in}_i$ the cumulative in-flow (the sum over all
-	 * commodities). If there is an arc transporting flow from 
-     * node i to node j, then $f^{in}_i - f^{out}_i == v_i$ 
-     * 
-	 */
-	 IloExprArray e_cumul_out_flow(env,instance.n_nodes);
-	 IloExprArray e_cumul_in_flow(env,instance.n_nodes);
-	 for (u_int m = 0; m < instance.n_nodes; m++){
-			e_cumul_out_flow[m] = IloExpr(env);
-		    e_cumul_in_flow[m] = IloExpr(env);
-	 }
-	 //walk over commodities, sum up flow per node
-	 for (u_int c = 0; c < instance.n_nodes; c++){
+	/* 
+	 * For each commodity l , the total flow is <= k if node l is active, 0 otherwise
+	 * (works well for all before g05, k=n/2 which is a bit slower with this)
+     */
+	for (u_int c = 1; c < (u_int) instance.n_nodes; c++){
+		IloExpr e_total_flow(env);		
 		for (u_int m = 0; m < n_edges; m++) {
-			const u_int i = edges[m].v1;
-			const u_int j = edges[m].v2;
-			e_cumul_out_flow[i] += v->fss[c][m];	
-			e_cumul_in_flow[j] += v->fss[c][m];	
+			e_total_flow += v->fss[c][m];	
 		} 
-	 }
-	 //walk over nodes, make sure cumulative in-flow == cumulative out-flow +1 if active, equal if inactive
-     for (u_int m = 1; m < instance.n_nodes; m++){
-		cout << "m: " << m << "\n";
-		cout << "in-flow: "<< e_cumul_in_flow[m] <<"\n";
-		cout << "out-flow: "<< e_cumul_out_flow[m] <<"\n";
-		model.add(e_cumul_in_flow[m] - e_cumul_out_flow[m] == v->vs[m]);
- 	 }
-
-	/*
-	 * The cumulative commodity flow decreases along each active edge.
-	 *
-	 * Let b_i be the cumulative out-flow at node i (the sum over all
-	 * commodities). If there is an arc transporting flow from 
-     * node i to node j, then b_i >= b_j. 
-	 * If the arc does not transport flow, b_i == b_j == 0
-     * 
-	 */
-
-	 //walk over edges, make sure out-flow is higher at source than at target
-     for (u_int m = 0; m < n_edges; m++){
-		const u_int i = edges[m].v1;
-		const u_int j = edges[m].v2;
-		//diff is > 0 if arc active, may be anything if arc inactive (min value: -k)
-		//using -1 and >= instead of > to avoid cplex problems
-		if (i > 0 && j > 0) {
-			model.add(e_cumul_out_flow[i] - 1 - e_cumul_out_flow[j] >= -(1 - v->xs[m]) * this->k );
-		}
- 	 }
-	e_cumul_out_flow.endElements();
-	e_cumul_in_flow.endElements();
+		model.add(e_total_flow <= this->k * v->vs[c]);
+		e_total_flow.end();
+	}
 
 	return v;
 }
