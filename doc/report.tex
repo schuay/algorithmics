@@ -66,7 +66,6 @@ Exactly one incoming selected edge for a selected node and none for a deselected
 \begin{equation}
 \forall j\in\{1,\ldots,n\}: \sum_{i\in\{1,\ldots,n\}} x_{ij} = v_j
 \end{equation}
-
 Active nodes have at least one active arc:
 \begin{equation}
 \forall i\in\{0,\ldots,n\}:  v_i \leq \sum_{j:(i,j)\in A} (x_{ij} + x_{ji})
@@ -102,16 +101,28 @@ Force level of deselected nodes to $0$:
 \subsection{Single Commodity Flow}
 \subsubsection{Variables}
 \begin{eqnarray}
+f_{ij} \in [0, k]  && \text{number of resources on edge } x_{ij}
 \end{eqnarray}
 \subsubsection{Constraints}
-\subsubsection{Objective Function}
+Every active node consumes exactly one resource:
+\begin{equation}
+\forall i \in \{0,\ldots,n\}: v_i = \sum_{j: (j, i) \in A} f_{ji} - \sum_{j: (i, j) \in A} f_{ij}
+\end{equation}
+Only active arcs transport resources, and the number of resources is $\leq k$:
+\begin{equation}
+\forall i, j \neq 0: f_{ij} \leq kx_{ij}
+\end{equation}
+Only a single arc incident on the artificial root transports resources, and that arc
+has exactly $k$ resources:
+\begin{equation}
+\forall i, j \text{ s.t. i or j is 0}: f_{ij} = kx_{ij}
+\end{equation}
 
 \subsection{Multi Commodity Flow}
 \subsubsection{Variables}
 \begin{eqnarray}
 \end{eqnarray}
 \subsubsection{Constraints}
-\subsubsection{Objective Function}
 
 \section{Results and Discussion}
 
